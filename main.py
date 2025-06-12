@@ -151,8 +151,8 @@ SEARCH_DIR_ITER = rec["search"]
 # ------------------------------------------------------------------------------
 Path("Results").mkdir(exist_ok=True)
 savemat("Results/kWave_BreastCT_WaveformInversionResults.mat", {
-    "xi": xi,
-    "yi": yi,
+    "xi": img_geom.xi,
+    "yi": img_geom.yi,
     "fDATA": freqs.reshape(1, -1),
     "niterAttenPerFreq": niterAttenPerFreq.reshape(1, -1),
     "niterSoSPerFreq": niterSoSPerFreq.reshape(1, -1),
