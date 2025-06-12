@@ -1,0 +1,6 @@
+cupy==11.6.0
+h5py==3.13.0
+matplotlib==3.6.2
+numpy==2.2.5
+scipy==1.10.1
+tqdm==4.67.1
