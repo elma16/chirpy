@@ -5,15 +5,15 @@ import scipy.sparse as sp
 
 try:
     import cupy as cp
-    from functions.decompBlockLU import decompBlockLU as decompBlockLU_gpu
-    from functions.applyBlockLU import applyBlockLU as applyBlockLU_gpu
+    from .decompBlockLU import decompBlockLU as decompBlockLU_gpu
+    from .applyBlockLU import applyBlockLU as applyBlockLU_gpu
 
     _GPU_AVAILABLE = True
 except ImportError:
     cp = None
     _GPU_AVAILABLE = False
 
-from functions.stencilOptParams import stencilOptParams
+from .stencilOptParams import stencilOptParams
 
 
 class HelmholtzSolver:
