@@ -1,5 +1,5 @@
 # PHAS0077 Research Project
-Wei Liao
+Student: Wei Liao
 
 This repository contains the code accompanying the project paper “A Flexible Python Framework for Full-Wave Inversion in Ultrasound Tomography”.
 
