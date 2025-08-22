@@ -165,14 +165,14 @@ class NonlinearLS(Function):
         return self._last_misfit
 
     # ------------------------------------------------------------------ #
-    def residual(self, m: np.ndarray, *, kind: str) -> np.ndarray:
+    def residual(self, m: np.ndarray, *, kind: str=None) -> np.ndarray:
         """Compute and cache r = F(m) − d, return residual."""
         Fm = self._op.forward(m, kind=kind)
         D = self._op.get_field("obs_data")
         self._cache = SimpleNamespace(model=m.copy(), F=Fm, kind=kind)
         return Fm - D
 
-    def value(self, m: np.ndarray, *, kind: str) -> float:
+    def value(self, m: np.ndarray, *, kind: str=None) -> float:
         """
         Evaluate the objective Φ(m) = ½ ‖w · r(m)‖² with optional encoding logic.
 
@@ -233,7 +233,7 @@ class NonlinearLS(Function):
         self._last_misfit = mis
         return mis
 
-    def gradient(self, m: np.ndarray, *, kind: str) -> np.ndarray:
+    def gradient(self, m: np.ndarray, *, kind: str=None) -> np.ndarray:
         """
         Compute the gradient ∇Φ(m) and cache the corresponding misfit.
 
@@ -307,7 +307,7 @@ class NonlinearLS(Function):
             m: np.ndarray,
             enc_list: List[Tuple[np.ndarray, np.ndarray]],
             *,
-            kind: str,
+            kind: str=None,
     ) -> float:
         op = self._op
         wbak, dbak = getattr(op, "enc_weights", None), getattr(op, "enc_delays", None)

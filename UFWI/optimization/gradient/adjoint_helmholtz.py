@@ -32,7 +32,8 @@ class HelmholtzAdjointGrad(GradientEvaluator):
     def evaluate(
             self,
             model: np.ndarray,
-            data: np.ndarray
+            data: np.ndarray,
+            kind: Optional[str] = None
     ) -> np.ndarray:
         """
         Compute the real‐valued gradient image from adjoint source `data`.

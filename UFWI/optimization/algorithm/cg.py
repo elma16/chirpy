@@ -136,7 +136,7 @@ class CG(Optimizer):
         scaling  = op.get_field("scaling")           # (Tx,)
         pert_src = VSRC * d.reshape(ny, nx, 1)
 
-        PERT_WV, _ = op.solve(pert_src, adjoint=False)
+        PERT_WV, _ = op._solve(pert_src, adjoint=False)
 
         N_tx, N_rx = op.n_tx, op.n_rx
         dREC = np.zeros((N_tx, N_rx), np.complex128)

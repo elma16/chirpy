@@ -90,7 +90,7 @@ class HelmholtzOperator(Operator):
         except AttributeError as exc:
             raise KeyError(name) from exc
 
-    def solve(self, src: np.ndarray, *, adjoint: bool = False):
+    def _solve(self, src: np.ndarray, *, adjoint: bool = False):
         """Delegates to the private :pyclass:`HelmholtzSolver`."""
         if self._cache is None:
             raise RuntimeError("forward() must be called first")
