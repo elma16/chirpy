@@ -99,7 +99,7 @@ class HelmholtzOperator(Operator):
     # ------------------------------------------------------------------ #
     # forward modelling
     # ------------------------------------------------------------------ #
-    def forward(self, m: np.ndarray) -> np.ndarray:
+    def forward(self, m: np.ndarray, kind=None) -> np.ndarray:
         """Return simulated Tx×Rx frequency-domain data F(m)."""
         if self._cache is None or not np.array_equal(m, self._cache.model):
             self._build_cache(m)
