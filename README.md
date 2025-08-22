@@ -3,7 +3,7 @@ Student: Wei Liao
 
 This repository contains the code accompanying the project paper “A Flexible Python Framework for Full-Wave Inversion in Ultrasound Tomography”.
 
-Repository Structure
+# Content
 - **UFWI:**
   The main software package implementing the framework.
 - **test:**
@@ -19,3 +19,18 @@ Repository Structure
   Uses breast phantom data simulated with k-Wave from the code repository of Ali et al.
   The dataset is included in the Releases section of this repository.
   For the time-domain example, the corresponding sound-speed field was resampled from this dataset.
+
+
+# Environment Setup
+To run the code locally, follow the steps below.
+1) Get the code: download or clone this repository.
+2) (Recommended) Create a clean Python environment
+3) Install k-Wave-python:
+   macOS requires system libraries first：
+   ```brew install fftw hdf5 zlib libomp```
+   Then install the Python package:
+   ```pip install k-Wave-python```
+4) Install project dependencies:
+   ```pip install -r requirements.txt```
+   
+
