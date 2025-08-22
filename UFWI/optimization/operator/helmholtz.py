@@ -23,7 +23,7 @@ from types import SimpleNamespace
 from ...geometry import ImageGrid2D
 from ...data import AcquisitionData
 from .base import Operator
-from functions.HelmholtzSolver import HelmholtzSolver  # internal only
+from .functions.HelmholtzSolver import HelmholtzSolver  # internal only
 
 
 class HelmholtzOperator(Operator):
