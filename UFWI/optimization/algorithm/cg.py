@@ -65,7 +65,7 @@ from typing import Literal, Optional, Dict, List
 import numpy as np
 
 from UFWI.data.image_data import ImageData
-from functions.ringingRemovalFilt import ringingRemovalFilt
+from UFWI.optimization.operator.functions.ringingRemovalFilt import ringingRemovalFilt
 from ..operator.helmholtz import HelmholtzOperator
 from ..function.least_squares import NonlinearLS
 from .base import Optimizer
