@@ -31,6 +31,6 @@ To run the code locally, follow the steps below.
    Then install the Python package:
    ```pip install k-Wave-python```
 4) Install project dependencies:
-   ```pip install -r requirements.txt```
+   ```pip install -r requirements.txt```， or manually install the missing dependencies by ```pip install```
    
 
