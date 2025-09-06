@@ -1,5 +1,3 @@
-*.egg-info/
-
 # IDE and editor files
 .vscode/
 .idea/
@@ -23,7 +21,6 @@ tests/__pycache__/
 plots/
 outputs/
 profiler/
-data/
 traces/
 cache/
 htmlcov/
