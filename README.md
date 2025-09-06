@@ -23,7 +23,7 @@ For time domain simulation, ([k-Wave-python](https://github.com/waltsims/k-wave-
 Install the core package with CPU-only dependencies:
 
 ```bash
-git clone https://github.com/[your-username]/chirpy.git
+git clone https://github.com/elma16/chirpy.git
 cd chirpy
 pip install .
 ```
