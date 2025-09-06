@@ -1,14 +1,13 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 from chirpy.geometry import ImageGrid2D, TransducerArray2D
 from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.wave_operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
 
+import matplotlib.pyplot as plt
 import matplotlib
-
-matplotlib.use("TkAgg")  # interactive plotting
+# matplotlib.use("TkAgg")  # interactive plotting
 
 # ------------------------------------------------------------
 # 1) Grid & models

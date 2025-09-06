@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 from chirpy.geometry import ImageGrid2D, TransducerArray2D
 from chirpy.data import AcquisitionData
@@ -7,10 +6,10 @@ from chirpy.optimization.operator.wave_operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
 from chirpy.data import ImageData
 
+import matplotlib.pyplot as plt
+from matplotlib import colors
 import matplotlib
-
-# Use TkAgg backend for interactive plotting
-matplotlib.use("TkAgg")
+# matplotlib.use("TkAgg")
 
 # ----------------------------
 # 1) Grid & true model
@@ -81,7 +80,7 @@ op = WaveOperator(
     pulse=pulse,
     use_encoding=False,
     drop_self_rx=False,
-    record_full_wf=True,  # <-- record the full wavefield for snapshots
+    record_full_wf=True,
     cfl=0.2,
     c_ref=c0,
     pml_size=10,
@@ -89,7 +88,7 @@ op = WaveOperator(
     scale_source_terms=True,
     src_mode="additive",
     pml_inside=False,
-    use_gpu=False,  # set True if your kwave C GPU backend is available
+    use_gpu=False,
     verbose=False,
 )
 
@@ -101,8 +100,6 @@ t = op.time_axis  # (nt,)
 WF = op.get_forward_fields()[0]  # (nt, ny, nx) for our single-Tx
 
 trace = Fm[0, 0]  # the only Rx trace, shape (nt,)
-
-from matplotlib import colors  # NEW
 
 # ----------------------------
 # 5) Pick 5 times & plot

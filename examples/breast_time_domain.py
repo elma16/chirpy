@@ -4,6 +4,15 @@
 # In[ ]:
 
 
+# from google.colab import drive
+# drive.mount("/content/drive")
+
+# %cd /content/drive/MyDrive/chirpy
+# !pip install .
+
+
+# In[ ]:
+
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,18 +31,24 @@ from scipy.io import loadmat
 import matplotlib
 # matplotlib.use("TkAgg")
 
-print("\n=== Breast UFWI example (time domain) ===")
+
+# In[ ]:
+
+
+ROOT_DIR = Path.cwd().parent
+DATA_DIR = Path(ROOT_DIR / "data")
+SAVE_DIR = Path(ROOT_DIR / "outputs")
+SAVE_DIR.mkdir(exist_ok=True, parents=True)
+
 # Settings
 USE_ENCODING = True  # Whether to use source encoding
 K = 80  # Number of random encoding loops
 TAU_MAX = 0.0  # Maximum random delay (seconds)
 DROP_SELF_RX = True  # Drop self-Rx when not encoding
 NORMALIZE = True  # Whether to normalize gradient
-
 N_ITER = 20  # Number of iterations
-DATA_DIR = Path("data")
-SAVE_DIR = Path("output")
-SAVE_DIR.mkdir(exist_ok=True, parents=True)
+use_gpu = False
+use_tqdm = True
 
 # Lower frequency & coarse grid
 f0 = 0.3e6  # Center frequency 0.3 MHz
@@ -71,6 +86,9 @@ true_image_data = ImageData(array=model_true, tx_array=tx_array, grid=img_grid)
 true_image_data.show()
 
 
+# In[ ]:
+
+
 # Synthesize observations & save
 fname = SAVE_DIR / f"d_obs_240x240_1mm_0p3MHz_new_512.npz"
 
@@ -104,6 +122,8 @@ op_inv = WaveOperator(
     drop_self_rx=DROP_SELF_RX,
     pulse=pulse,
     c_ref=c_ref,
+    use_gpu=use_gpu,
+    use_tqdm=use_tqdm,
 )
 
 # -------- gradient evaluator & LS function ---------------------- #
@@ -153,6 +173,9 @@ else:
 
 op.solve(fun=f_ls, m0=img_init, kind="c", n_iter=N_ITER)
 op.save_record(SAVE_DIR / f"record_{USE}_breast_512.npz")
+
+
+# In[ ]:
 
 
 # =================================================================
@@ -322,4 +345,3 @@ print(f"\n[info] Figure saved → {out_fig}")
 
 plt.ioff()
 plt.show()
-

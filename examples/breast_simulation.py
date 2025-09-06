@@ -4,6 +4,15 @@
 # In[ ]:
 
 
+# from google.colab import drive
+# drive.mount("/content/drive")
+
+# %cd /content/drive/MyDrive/chirpy
+# !pip install .
+
+
+# In[ ]:
+
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,11 +29,11 @@ from chirpy.signals import GaussianModulatedPulse
 # matplotlib.use("TkAgg")
 
 
-# In[3]:
+# In[ ]:
 
 
 # Settings
-ROOT_DIR = Path("/Users/elliottmacneil/python/chirpy")
+ROOT_DIR = Path.cwd().parent
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
@@ -34,6 +43,8 @@ f0 = 0.3e6  # Center frequency 0.3 MHz
 Nx = Ny = 240  # Number of grid points
 dx = dy = 1.0e-3  # Grid spacing 1 mm
 c0 = 1500.0
+use_gpu = False
+use_tqdm = True
 
 # (1) Load and downsample true sound-speed model
 mat = loadmat(DATA_DIR / "C_true.mat")
@@ -69,7 +80,6 @@ true_image_data = ImageData(array=model_true, tx_array=tx_array, grid=img_grid)
 true_image_data.show()
 
 
-
 # In[ ]:
 
 
@@ -93,7 +103,8 @@ op_true = WaveOperator(
     drop_self_rx=True,
     pulse=pulse,
     c_ref=c_ref,
-    use_tqdm=True
+    use_gpu=use_gpu,
+    use_tqdm=use_tqdm,
 )
 
 # (7) Synthesize observations & save
@@ -101,4 +112,3 @@ fname = SAVE_DIR / f"d_obs_240x240_1mm_0p3MHz_new_512.npz"
 
 acq_sim = op_true.simulate()
 acq_sim.save(fname)
-

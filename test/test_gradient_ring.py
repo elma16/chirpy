@@ -1,6 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import colors
 
 from chirpy.geometry import ImageGrid2D, TransducerArray2D
 from chirpy.data import AcquisitionData, ImageData
@@ -9,9 +7,10 @@ from chirpy.signals import GaussianModulatedPulse
 from chirpy.optimization.gradient.time_grad import AdjointStateGrad
 from chirpy.optimization.function.least_squares import NonlinearLS
 
+import matplotlib.pyplot as plt
+from matplotlib import colors
 import matplotlib
-
-matplotlib.use("TkAgg")  # interactive plotting
+# matplotlib.use("TkAgg")  # interactive plotting
 
 # ------------------------------------------------------------
 # 1) Smaller grid (keep physical positions/size the same)

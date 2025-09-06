@@ -9,8 +9,7 @@ from chirpy.signals import GaussianModulatedPulse
 import matplotlib
 from matplotlib import colors
 
-# Use TkAgg backend for interactive plotting
-matplotlib.use("TkAgg")
+# matplotlib.use("TkAgg")
 
 # ------------------------------------------------------------
 # 1) Grid & models
@@ -76,7 +75,7 @@ op = WaveOperator(
     pulse=pulse,
     use_encoding=False,
     drop_self_rx=False,
-    record_full_wf=True,  # record full wavefield if you want to inspect forward too
+    record_full_wf=True,
     cfl=0.2,
     c_ref=c0,
     pml_size=10,
@@ -84,7 +83,7 @@ op = WaveOperator(
     scale_source_terms=True,
     src_mode="additive",
     pml_inside=False,
-    use_gpu=False,  # set True if your k-Wave GPU backend is available
+    use_gpu=False,
     verbose=False,
 )
 

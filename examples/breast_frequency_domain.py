@@ -7,12 +7,11 @@
 # from google.colab import drive
 # drive.mount("/content/drive")
 
-# %cd /content/drive/MyDrive/msgb
-# !pip install .[gpu]
+# %cd /content/drive/MyDrive/chirpy
+# !pip install .
 
 
-# In[ ]:
-
+# In[3]:
 
 
 import numpy as np
@@ -40,9 +39,20 @@ from chirpy.optimization.gradient.adjoint_helmholtz import HelmholtzAdjointGrad
 # from UFWI.utils.InversionVisualizer import InversionVisualizer  # Visualization wrapper
 from chirpy.utils.visulizer_multi_mode import Visualizer
 
+
+# In[ ]:
+
+
 # ------------------------------------------------------------------------------
 # (1) Load raw k-Wave data and construct AcquisitionData and ImageGeometry
 # ------------------------------------------------------------------------------
+ROOT_DIR = Path.cwd().parent
+DATA_DIR = Path(ROOT_DIR / "data")
+SAVE_DIR = Path(ROOT_DIR / "outputs")
+SAVE_DIR.mkdir(exist_ok=True, parents=True)
+Path("Results").mkdir(exist_ok=True)
+
+# TODO what is sampledata?
 raw_mat = Path("SampleData/kWave_BreastCT.mat")
 raw = load_mat(raw_mat)
 
@@ -67,6 +77,10 @@ acq_data = AcquisitionData(
     c0=c0,
 )
 
+
+# In[ ]:
+
+
 # ------------------------------------------------------------------------------
 # (2) Define frequency list & preprocessing pipeline
 # ------------------------------------------------------------------------------
@@ -89,6 +103,10 @@ pipe = Pipeline(
 # Apply all preprocessing to the acquisition data
 acq_data = pipe(acq_data)  # Resulting shape: (Tx, Rx, Nfreq)
 
+
+# In[ ]:
+
+
 # ------------------------------------------------------------------------------
 # (3) Prepare iteration counts for SoS/Atten per frequency
 # ------------------------------------------------------------------------------
@@ -106,6 +124,10 @@ print(
     f"SoS iterations per frequency: {niterSoSPerFreq}, Atten iterations: {niterAttenPerFreq}"
 )
 print(f"Total number of iterations: {total_iters} (SoS + Atten)")
+
+
+# In[ ]:
+
 
 # ------------------------------------------------------------------------------
 # (4) Initialize complex slowness model using ImageData
@@ -133,9 +155,13 @@ viz = Visualizer(
     atten_true=atten_true,
     mode="both",
     baseline=1500,
-    sign_conv=-1,  # 与算子一致
+    sign_conv=-1,
     atten_unit="Np/(Hz·m)",
 )
+
+
+# In[ ]:
+
 
 # ------------------------------------------------------------------------------
 # (6) Loop over each frequency, use CG_Time.solve(...) in two stages
@@ -182,7 +208,6 @@ SEARCH_DIR_ITER = rec["search"]
 # ------------------------------------------------------------------------------
 # (8) Save the final result + intermediate snapshots
 # ------------------------------------------------------------------------------
-Path("Results").mkdir(exist_ok=True)
 savemat(
     "Results/kWave_BreastCT_WaveformInversionResults.mat",
     {
@@ -198,6 +223,3 @@ savemat(
     },
     do_compression=True,
 )
-
-print("Results saved to Results/kWave_BreastCT_WaveformInversionResults.mat")
-

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from data import AcquisitionData
+from chirpy.data import AcquisitionData
 
 
 class BaseProcessor(ABC):
