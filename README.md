@@ -1,4 +1,4 @@
-# Chirpy
+# Chirpy 🦜
 
 A Flexible Python Framework for Full-Wave Inversion in Ultrasound Tomography
 
