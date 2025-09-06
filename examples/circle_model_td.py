@@ -1,3 +1,20 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+# from google.colab import drive
+# drive.mount("/content/drive")
+
+# %cd /content/drive/MyDrive/msgb
+# !pip install .[gpu]
+
+
+# In[ ]:
+
+
+
 import numpy as np
 import matplotlib
 
@@ -253,3 +270,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

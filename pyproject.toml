@@ -28,6 +28,7 @@ dev = [
     "pytest",
     "ruff",
     "pre-commit",
+    "nbconvert"
 ]
 
 [tool.ruff.lint]

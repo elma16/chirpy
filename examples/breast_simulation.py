@@ -1,3 +1,10 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -12,9 +19,14 @@ from chirpy.signals import GaussianModulatedPulse
 
 # matplotlib.use("TkAgg")
 
+
+# In[3]:
+
+
 # Settings
-DATA_DIR = Path("data")
-SAVE_DIR = Path("output")
+ROOT_DIR = Path("/Users/elliottmacneil/python/chirpy")
+DATA_DIR = Path(ROOT_DIR / "data")
+SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
 
 # Lower frequency & coarse grid
@@ -56,6 +68,11 @@ acq_data = AcquisitionData.from_geometry(tx_array=tx_array, grid=img_grid)
 true_image_data = ImageData(array=model_true, tx_array=tx_array, grid=img_grid)
 true_image_data.show()
 
+
+
+# In[ ]:
+
+
 # (6) Construct WaveOperator
 medium_params = {
     "sound_speed": model_true.astype(np.float32),
@@ -84,3 +101,4 @@ fname = SAVE_DIR / f"d_obs_240x240_1mm_0p3MHz_new_512.npz"
 
 acq_sim = op_true.simulate()
 acq_sim.save(fname)
+

@@ -8,7 +8,7 @@ This repository contains the code accompanying the project paper "A Flexible Pyt
 
 This project is a fork and extension of the original work by Wei Liao ([original repository](https://github.com/weiliao001211/PHAS0077-Research-Project)). 
 
-For time domain simulation, ([k-Wave-python](https://github.com/waltsims/k-wave-python)) is used. This has support for CPU and GPU hardware. For frequency domain simulation on a GPU ([CuPy](https://cupy.dev/)) is used. 
+For time domain simulation, [k-Wave-python](https://github.com/waltsims/k-wave-python) is used. This has support for CPU and GPU hardware. For frequency domain simulation on a GPU [CuPy](https://cupy.dev/) is used. 
 
 
 ## Installation

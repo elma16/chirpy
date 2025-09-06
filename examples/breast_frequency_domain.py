@@ -1,3 +1,20 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+# from google.colab import drive
+# drive.mount("/content/drive")
+
+# %cd /content/drive/MyDrive/msgb
+# !pip install .[gpu]
+
+
+# In[ ]:
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -183,3 +200,4 @@ savemat(
 )
 
 print("Results saved to Results/kWave_BreastCT_WaveformInversionResults.mat")
+
