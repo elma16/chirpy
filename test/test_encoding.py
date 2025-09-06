@@ -2,27 +2,30 @@
 import numpy as np
 from pathlib import Path
 import matplotlib
+
 matplotlib.use("Agg")  # headless-safe; change to "TkAgg" for interactive windows
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from scipy.io import loadmat
 
-from UFWI.geometry import ImageGrid2D, TransducerArray2D
-from UFWI.data import AcquisitionData
-from UFWI.data.image_data import ImageData
-from UFWI.signals import GaussianModulatedPulse
-from UFWI.optimization.operator.wave_operator import WaveOperator
-from UFWI.optimization.gradient.time_grad import AdjointStateGrad
-from UFWI.optimization.function.least_squares import NonlinearLS
+from chirpy.geometry import ImageGrid2D, TransducerArray2D
+from chirpy.data import AcquisitionData
+from chirpy.data.image_data import ImageData
+from chirpy.signals import GaussianModulatedPulse
+from chirpy.optimization.operator.wave_operator import WaveOperator
+from chirpy.optimization.gradient.time_grad import AdjointStateGrad
+from chirpy.optimization.function.least_squares import NonlinearLS
 
 
-def build_obs_if_needed(dfile: Path,
-                        img_grid: ImageGrid2D,
-                        tx_array: TransducerArray2D,
-                        model_true: np.ndarray,
-                        record_time: float,
-                        pulse,
-                        c_ref: float):
+def build_obs_if_needed(
+    dfile: Path,
+    img_grid: ImageGrid2D,
+    tx_array: TransducerArray2D,
+    model_true: np.ndarray,
+    record_time: float,
+    pulse,
+    c_ref: float,
+):
     """Synthesize observation once (non-encoding, sequential) and save to npz."""
     if dfile.exists():
         return
@@ -40,8 +43,8 @@ def build_obs_if_needed(dfile: Path,
         medium_params=medium_true,
         record_time=record_time,
         record_full_wf=False,
-        use_encoding=False,       # synthesize plain shots
-        drop_self_rx=True,        # typical config
+        use_encoding=False,  # synthesize plain shots
+        drop_self_rx=True,  # typical config
         pulse=pulse,
         c_ref=c_ref,
         use_gpu=False,
@@ -51,10 +54,9 @@ def build_obs_if_needed(dfile: Path,
     print(f"[info] ✓ observation saved → {dfile}")
 
 
-def run_gradient_encoded(op: WaveOperator,
-                         init_model: np.ndarray,
-                         K: int | None,
-                         seed: int = 1234) -> tuple[np.ndarray, float]:
+def run_gradient_encoded(
+    op: WaveOperator, init_model: np.ndarray, K: int | None, seed: int = 1234
+) -> tuple[np.ndarray, float]:
     """
     Use AdjointStateGrad's internal K-loop.
     - If tau_max == 0: random ±1 weights, no delays.
@@ -67,9 +69,9 @@ def run_gradient_encoded(op: WaveOperator,
     return g, float(fun.last_misfit)
 
 
-def run_single_realization_with_random_wts_and_delays(op: WaveOperator,
-                                                      init_model: np.ndarray,
-                                                      seed: int = 2025) -> tuple[np.ndarray, float]:
+def run_single_realization_with_random_wts_and_delays(
+    op: WaveOperator, init_model: np.ndarray, seed: int = 2025
+) -> tuple[np.ndarray, float]:
     """
     For the K=1 (single realization) WITH delays case:
     Manually set random ±1 weights and random delays, then run a single gradient.
@@ -128,11 +130,13 @@ def main():
     pulse = GaussianModulatedPulse(f0=f0, frac_bw=0.75, amp=1.0)
 
     # ---------------- synthesize observation if missing ----------------
-    build_obs_if_needed(dfile, img_grid, tx_array, model_true, record_time, pulse, c_ref)
+    build_obs_if_needed(
+        dfile, img_grid, tx_array, model_true, record_time, pulse, c_ref
+    )
 
     # ---------------- load observation & build background operator base ----------------
     dat = np.load(dfile, allow_pickle=True)
-    d_obs = dat["array"]           # (Tx, n_rx, nt) element order
+    d_obs = dat["array"]  # (Tx, n_rx, nt) element order
     t_vec = dat["time"]
 
     # initial/background model
@@ -159,13 +163,15 @@ def main():
     # ---------- helper to build encoding operator with a given tau_max ----------
     def make_op(tau_max_sec: float) -> WaveOperator:
         return WaveOperator(
-            data=AcquisitionData(array=d_obs, tx_array=tx_array, grid=img_grid, time=t_vec),
+            data=AcquisitionData(
+                array=d_obs, tx_array=tx_array, grid=img_grid, time=t_vec
+            ),
             medium_params=medium_bg,
             record_time=record_time,
             record_full_wf=True,
-            use_encoding=True,         # enable encoding for all tests
-            tau_max=tau_max_sec,       # =0: no delays; >0: allow delays
-            drop_self_rx=True,         # ignored when use_encoding=True
+            use_encoding=True,  # enable encoding for all tests
+            tau_max=tau_max_sec,  # =0: no delays; >0: allow delays
+            drop_self_rx=True,  # ignored when use_encoding=True
             pulse=pulse,
             c_ref=c_ref,
             use_gpu=False,
@@ -174,15 +180,15 @@ def main():
 
     # ================= Row 1: NO time delays (random ±1, no delays) =================
     op_no_delay = make_op(tau_max_sec=0.0)
-    g_1,  _m1  = run_gradient_encoded(op_no_delay, model_init, K=None)  # K=1 realization
-    g_6,  _m6  = run_gradient_encoded(op_no_delay, model_init, K=6)
+    g_1, _m1 = run_gradient_encoded(op_no_delay, model_init, K=None)  # K=1 realization
+    g_6, _m6 = run_gradient_encoded(op_no_delay, model_init, K=6)
     g_12, _m12 = run_gradient_encoded(op_no_delay, model_init, K=12)
 
     # ================= Row 2: WITH time delays (random ±1 + random delays) =================
     tau_max_sec = 8.0 / f0  # ~8 cycles
     op_delay = make_op(tau_max_sec=tau_max_sec)
-    g_1d,  _m1d  = run_single_realization_with_random_wts_and_delays(op_delay, model_init)
-    g_6d,  _m6d  = run_gradient_encoded(op_delay, model_init, K=6)
+    g_1d, _m1d = run_single_realization_with_random_wts_and_delays(op_delay, model_init)
+    g_6d, _m6d = run_gradient_encoded(op_delay, model_init, K=6)
     g_12d, _m12d = run_gradient_encoded(op_delay, model_init, K=12)
 
     # ---------------- gradients to display & simple scalar errors (mean absolute difference) ----------
@@ -209,7 +215,7 @@ def main():
     # print(f"[info] ✓ results saved → {SAVE_DIR/'encoding_grid_vs_baseline.npz'}")
 
     # ---------------- plotting: 2 rows × 3 columns of GRADIENT maps, corner shows simple error ----------
-    extent_xy = (-(Nx/2)*dx, (Nx/2)*dx, -(Ny/2)*dy, (Ny/2)*dy)
+    extent_xy = (-(Nx / 2) * dx, (Nx / 2) * dx, -(Ny / 2) * dy, (Ny / 2) * dy)
     G_stack = np.stack(grads, axis=0)
     A = np.percentile(np.abs(G_stack), 99.5)
     norm = colors.TwoSlopeNorm(vmin=-A, vcenter=0.0, vmax=A)
@@ -223,10 +229,13 @@ def main():
     # Row 1
     for j in range(3):
         ax = axes[0, j]
-        im = ax.imshow(grads[j], origin="lower", extent=extent_xy, cmap="seismic", norm=norm)
+        im = ax.imshow(
+            grads[j], origin="lower", extent=extent_xy, cmap="seismic", norm=norm
+        )
         ims.append(im)
         ax.set_title(titles_row1[j])
-        ax.set_xlabel("x [m]"); ax.set_ylabel("y [m]")
+        ax.set_xlabel("x [m]")
+        ax.set_ylabel("y [m]")
         # ax.text(0.02, 0.04, f"error={panel_err[j]:.3e}",
         #         transform=ax.transAxes, fontsize=10, color="white",
         #         bbox=dict(facecolor="black", alpha=0.45, pad=5, edgecolor="none"))
@@ -234,10 +243,13 @@ def main():
     # Row 2
     for j in range(3):
         ax = axes[1, j]
-        im = ax.imshow(grads[3 + j], origin="lower", extent=extent_xy, cmap="seismic", norm=norm)
+        im = ax.imshow(
+            grads[3 + j], origin="lower", extent=extent_xy, cmap="seismic", norm=norm
+        )
         ims.append(im)
         ax.set_title(titles_row2[j])
-        ax.set_xlabel("x [m]"); ax.set_ylabel("y [m]")
+        ax.set_xlabel("x [m]")
+        ax.set_ylabel("y [m]")
         # ax.text(0.02, 0.04, f"error={panel_err[3 + j]:.3e}",
         #         transform=ax.transAxes, fontsize=10, color="white",
         #         bbox=dict(facecolor="black", alpha=0.45, pad=5, edgecolor="none"))
