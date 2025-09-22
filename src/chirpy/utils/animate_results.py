@@ -1,10 +1,7 @@
-# animate_results.py
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 import h5py
-import matplotlib
 
 # matplotlib.use('TkAgg')  # Use TkAgg backend for interactive plotting
 

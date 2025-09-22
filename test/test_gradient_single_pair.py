@@ -6,7 +6,8 @@ from chirpy.optimization.operator.wave_operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
 
 import matplotlib.pyplot as plt
-import matplotlib
+from matplotlib import colors
+
 # matplotlib.use("TkAgg")  # interactive plotting
 
 # ------------------------------------------------------------
@@ -133,7 +134,6 @@ kernel_frames = np.squeeze(np.stack(kernel_frames, axis=0))  # (n, ny, nx)
 # ------------------------------------------------------------
 # 8) Figure 1: three rows — u_t, lam_t, kernel frames (shared robust norms per row)
 # ------------------------------------------------------------
-from matplotlib import colors
 
 extent = img_grid.extent
 

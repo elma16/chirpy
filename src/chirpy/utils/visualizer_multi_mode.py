@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
 from typing import Literal
-import matplotlib
 # matplotlib.use("TkAgg")  # Use TkAgg backend for interactive plotting
 
 
@@ -158,7 +157,7 @@ class Visualizer:
 
         if mode in ("atten", "both"):
             if mode == "atten":
-                ax_ta, ax_ea, ax_ga_unused, ax_sa = (
+                ax_ta, ax_ea, _ax_ga_unused, ax_sa = (
                     self.axes[0, 0],
                     self.axes[1, 0],
                     self.axes[0, 1],
@@ -166,7 +165,7 @@ class Visualizer:
                 )
             else:
                 # both: place on the bottom row (left/middle); bottom-right reserved for unified Search Direction
-                ax_ta, ax_ea, ax_ga_unused, ax_sa = (
+                ax_ta, ax_ea, _ax_ga_unused, ax_sa = (
                     self.axes[1, 0],
                     self.axes[1, 1],
                     None,
@@ -246,7 +245,7 @@ class Visualizer:
     # -----------------------------------------------------------------
     def update(
         self, *, vel_est=None, atten_est=None, grad=None, search_dir=None, title=None
-    ):
+    ):  # noqa: C901
         self.global_iter += 1
         k = self.global_iter
 

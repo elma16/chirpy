@@ -1,10 +1,8 @@
-import copy
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import zoom as ndi_zoom
 from scipy.interpolate import RegularGridInterpolator
-from typing import Optional
 
 from chirpy.data.data_container import DataContainer
 
@@ -139,7 +137,7 @@ class ImageData(DataContainer):
         figsize: tuple[int, int] | None = None,
         show_grid: bool = False,
         **imshow_kw,
-    ):
+    ):  # noqa: C901
         """
         Visualize a snapshot from history with optional overlays.
 
@@ -231,7 +229,7 @@ class ImageData(DataContainer):
         # underlay transducer positions
         if underlay_tx and getattr(self, "tx_array", None) is not None:
             # default style for transducer markers
-            base_style = dict(s=50, linewidths=0.5)
+            base_style = {"s": 50, "linewidths": 0.5}
             if tx_style:
                 base_style.update(tx_style)
 
@@ -278,7 +276,7 @@ class ImageData(DataContainer):
         # show grid lines if available
         if show_grid and getattr(self, "grid", None) is not None:
             xi, yi = self.grid.xi, self.grid.yi
-            gkw = dict(color="black", linestyle="--", linewidth=0.5)
+            gkw = {"color": "black", "linestyle": "--", "linewidth": 0.5}
             for x in xi:
                 ax.axvline(x, **gkw)
             for y in yi:

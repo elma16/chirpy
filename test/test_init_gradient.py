@@ -8,10 +8,8 @@ from chirpy.data.image_data import ImageData
 from chirpy.signals import GaussianModulatedPulse
 from chirpy.optimization.operator.wave_operator import WaveOperator
 from chirpy.optimization.gradient.time_grad import AdjointStateGrad
-from chirpy.optimization.function.least_squares import NonlinearLS
 
 import matplotlib.pyplot as plt
-import matplotlib
 # matplotlib.use("TKAgg")
 
 

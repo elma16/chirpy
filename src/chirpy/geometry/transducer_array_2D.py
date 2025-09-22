@@ -267,7 +267,7 @@ class TransducerArray2D(Geometry):
         is_tx: Optional[bool] = None,
         is_rx: Optional[bool] = None,
         new_id: Optional[object] = None,
-    ) -> None:
+    ) -> None:  # noqa: C901
         """
         Edit a transducer's attributes in-place.
 

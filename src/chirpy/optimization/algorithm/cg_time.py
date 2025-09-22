@@ -1,12 +1,11 @@
 from __future__ import annotations
-import time
-from typing import Literal, Optional, Dict, List
+from typing import Optional, Dict
 import numpy as np
 
 from chirpy.data.image_data import ImageData
 from chirpy.optimization.function.least_squares import NonlinearLS
 from chirpy.optimization.algorithm.base import Optimizer
-from chirpy.utils.visulizer_multi_mode import Visualizer
+from chirpy.utils.visualizer_multi_mode import Visualizer
 
 # ---------------- Constants ---------------- #
 _VEL_MIN, _VEL_MAX = 800.0, 2500.0
@@ -169,7 +168,7 @@ class CG_Time(Optimizer):
         *,
         kind: str,
         verb: bool = False,
-    ):
+    ):  # noqa: C901
         """
         Perform a single step of the CG_Time algorithm.
         """

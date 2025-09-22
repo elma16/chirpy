@@ -6,7 +6,6 @@ from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.wave_operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
 
-import matplotlib
 from matplotlib import colors
 
 # matplotlib.use("TkAgg")

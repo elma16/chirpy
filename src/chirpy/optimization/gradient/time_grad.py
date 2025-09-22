@@ -292,7 +292,7 @@ class AdjointStateGrad(GradientEvaluator):
         return self._single_grad(m, res, kind)
 
     # ------------------------------------------------------------------ #
-    def _single_grad(self, m: np.ndarray, res: np.ndarray, kind: str) -> np.ndarray:
+    def _single_grad(self, m: np.ndarray, res: np.ndarray, kind: str) -> np.ndarray:  # noqa: C901
         """
         Compute the gradient contribution for a single (possibly encoded) shot set.
 

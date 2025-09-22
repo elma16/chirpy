@@ -40,7 +40,7 @@ class ImageGrid2D(Geometry):
         ymax: float | None = None,
         # limits
         n_max: int | None = None,
-    ):
+    ):  # noqa: C901
         # -------------------------------------------------------------
         # 1) explicit coordinate arrays
         # -------------------------------------------------------------

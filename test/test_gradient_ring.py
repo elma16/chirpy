@@ -9,7 +9,6 @@ from chirpy.optimization.function.least_squares import NonlinearLS
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
-import matplotlib
 # matplotlib.use("TkAgg")  # interactive plotting
 
 # ------------------------------------------------------------

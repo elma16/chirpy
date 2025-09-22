@@ -1,7 +1,6 @@
 import numpy as np
 import scipy.sparse.linalg as spla
 from scipy.sparse import coo_matrix
-import scipy.sparse as sp
 
 try:
     import cupy as cp
@@ -297,7 +296,7 @@ class HelmholtzSolver:
         Dl[:, j] = cp.asarray(D_block.diagonal(-1))
         Du[:, j] = cp.asarray(D_block.diagonal(1))
 
-        self.invT = decompBlockLU(
+        self.invT = decompBlockLU_gpu(
             self.Ld, self.Ll, self.Lu, Dd, Dl, Du, self.Ud, self.Ul, self.Uu
         )
 

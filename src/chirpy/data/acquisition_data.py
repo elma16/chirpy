@@ -254,13 +254,6 @@ class AcquisitionData(DataContainer):
                 is_tx=is_tx.astype(bool),
                 is_rx=is_rx.astype(bool),
             )
-
-            # meta / ctx
-            meta = (
-                z["meta"].item()
-                if "meta" in z.files
-                else {"version": "unknown", "mode": "none"}
-            )
             try:
                 ctx = json.loads(z["ctx_json"].item()) if "ctx_json" in z.files else {}
             except Exception:

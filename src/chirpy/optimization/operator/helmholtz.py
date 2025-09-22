@@ -21,7 +21,6 @@ their functionality is now part of
 from __future__ import annotations
 import numpy as np
 from types import SimpleNamespace
-from chirpy.geometry import ImageGrid2D
 from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.base import Operator
 from chirpy.optimization.operator.functions.HelmholtzSolver import (

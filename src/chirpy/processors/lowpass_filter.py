@@ -217,9 +217,12 @@ class LowpassFilter(BaseProcessor):
         data.array[:] = _tukey_lowpass_nd(data.array, dt, f_cut, self.roll)
 
         # Record processing history
-        data.ctx["lowpass"] = dict(
-            f_cut=f_cut, f_cut_requested=f_cut_req, roll=self.roll, dt=dt
-        )
+        data.ctx["lowpass"] = {
+            "f_cut": f_cut,
+            "f_cut_requested": f_cut_req,
+            "roll": self.roll,
+            "dt": dt,
+        }
 
         return data
 

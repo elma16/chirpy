@@ -8,7 +8,6 @@ from chirpy.data import ImageData
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
-import matplotlib
 # matplotlib.use("TkAgg")
 
 # ----------------------------

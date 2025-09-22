@@ -15,13 +15,13 @@ def stencilOptParams(vmin, vmax, f, h, g):
     """
 
     # Define Grid and Compute Gmin, Gmax
-    l, r = 100, 10
+    n_theta, r = 100, 10
     Gmin, Gmax = vmin / (f * h), vmax / (f * h)
 
     # Generate Theta and G Values
-    m = np.arange(1, l + 1)
+    m = np.arange(1, n_theta + 1)
     n = np.arange(1, r + 1)
-    theta = (m - 1) * np.pi / (4 * (l - 1))
+    theta = (m - 1) * np.pi / (4 * (n_theta - 1))
     G = 1 / (1 / Gmax + ((n - 1) / (r - 1)) * (1 / Gmin - 1 / Gmax))
 
     # Create Meshgrid

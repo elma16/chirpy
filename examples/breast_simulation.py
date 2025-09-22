@@ -1,24 +1,6 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
-
-# from google.colab import drive
-# drive.mount("/content/drive")
-
-# %cd /content/drive/MyDrive/chirpy
-# !pip install .
-
-
-# In[ ]:
-
-
-import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
+import numpy as np
 from scipy.io import loadmat
-import matplotlib
 
 from chirpy.geometry import ImageGrid2D, TransducerArray2D
 from chirpy.data import AcquisitionData
@@ -26,89 +8,95 @@ from chirpy.data.image_data import ImageData
 from chirpy.optimization.operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
 
-# matplotlib.use("TkAgg")
+"""
+Breast phantom simulation (time domain).
 
+Process:
+1) Load ground-truth speed map C_true (MATLAB .mat).
+2) Downsample to the working ImageGrid2D (Nx, Ny, dx, dy).
+3) Build a ring TransducerArray2D and AcquisitionData on that grid.
+4) Configure WaveOperator with medium parameters and a Gaussian-modulated pulse.
+5) Run forward simulation to synthesize observations; save to outputs/.
+"""
 
-# In[ ]:
-
-
-# Settings
-ROOT_DIR = Path.cwd().parent
-DATA_DIR = Path(ROOT_DIR / "data")
-SAVE_DIR = Path(ROOT_DIR / "outputs")
+# --------------------------- Configuration --------------------------- #
+ROOT_DIR = Path.cwd()
+DATA_DIR = ROOT_DIR / "data"
+SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
 
-# Lower frequency & coarse grid
-f0 = 0.3e6  # Center frequency 0.3 MHz
-Nx = Ny = 240  # Number of grid points
-dx = dy = 1.0e-3  # Grid spacing 1 mm
-c0 = 1500.0
+# Grid / physics
+Nx = Ny = 240
+dx = dy = 1.0e-3
+c0_ref = 1500.0
+f0 = 0.3e6
 use_gpu = False
 use_tqdm = True
 
-# (1) Load and downsample true sound-speed model
-mat = loadmat(DATA_DIR / "C_true.mat")
-model_raw = mat["C_true"]  # Original (1601,1601)
-print("Original model shape:", model_raw.shape)
-
-# (2) make ImageGrid2D and compute record time
-img_grid = ImageGrid2D(nx=Nx, ny=Ny, dx=dx)
-
-# Downsample using ImageGrid2D
-img_raw = ImageData(model_raw)
-img_true = img_raw.downsample_to(new_grid=img_grid)
-model_true = img_true.array
-print("Downsampled model shape:", model_true.shape)
-c_ref = model_true.max()
-
-# Compute record time
-extent = img_grid.extent
-c_min = float(model_true.min())
-record_time = 1.3 * (extent[1] - extent[0]) / c_min
-print(f"record_time = {record_time * 1e3:.2f} ms")
-
-# (3) Construct 512-element ring array & mask
+# Acquisition
 n_tx = 512
 radius = 110e-3  # 110 mm
-tx_array = TransducerArray2D.from_ring_array_2D(r=radius, grid=img_grid, n=n_tx)
-
-# (4) AcquisitionData
-acq_data = AcquisitionData.from_geometry(tx_array=tx_array, grid=img_grid)
-
-# (5) Visualize true sound speed + sensors
-true_image_data = ImageData(array=model_true, tx_array=tx_array, grid=img_grid)
-true_image_data.show()
 
 
-# In[ ]:
+# --------------------------- Utilities --------------------------- #
+def compute_record_time(grid: ImageGrid2D, c_min: float, pad: float = 1.3) -> float:
+    Lx = grid.extent[1] - grid.extent[0]
+    return float(pad * Lx / c_min)
 
 
-# (6) Construct WaveOperator
-medium_params = {
-    "sound_speed": model_true.astype(np.float32),
-    "density": np.ones((Ny, Nx), np.float32) * 1000.0,
-    "alpha_coeff": np.zeros((Ny, Nx), np.float32),
-    "alpha_power": 1.01,
-    "alpha_mode": "no_dispersion",
-}
+# --------------------------- Main flow --------------------------- #
+def main() -> None:
+    # 1) Load & downsample ground-truth sound speed
+    mat = loadmat(DATA_DIR / "C_true.mat")
+    model_raw = mat["C_true"]  # expected 2D array
+    img_grid = ImageGrid2D(nx=Nx, ny=Ny, dx=dx)
 
-pulse = GaussianModulatedPulse(f0=f0, frac_bw=0.75, amp=1.0)
+    img_true = ImageData(model_raw).downsample_to(new_grid=img_grid)
+    c_true = img_true.array.astype(np.float32)
 
-op_true = WaveOperator(
-    data=acq_data,
-    medium_params=medium_params,
-    record_time=record_time,
-    record_full_wf=False,
-    use_encoding=False,
-    drop_self_rx=True,
-    pulse=pulse,
-    c_ref=c_ref,
-    use_gpu=use_gpu,
-    use_tqdm=use_tqdm,
-)
+    # 2) Record time and reference speed
+    c_min = float(c_true.min())
+    c_ref = float(c_true.max())
+    record_time = compute_record_time(img_grid, c_min)
 
-# (7) Synthesize observations & save
-fname = SAVE_DIR / f"d_obs_240x240_1mm_0p3MHz_new_512.npz"
+    # 3) Ring array + acquisition container
+    tx_array = TransducerArray2D.from_ring_array_2D(r=radius, grid=img_grid, n=n_tx)
+    acq_geom = AcquisitionData.from_geometry(tx_array=tx_array, grid=img_grid)
 
-acq_sim = op_true.simulate()
-acq_sim.save(fname)
+    # Optional quick view
+    # ImageData(array=c_true, tx_array=tx_array, grid=img_grid).show()
+
+    # 4) Medium + pulse + operator
+    medium = {
+        "sound_speed": c_true,
+        "density": np.full_like(c_true, 1000.0, dtype=np.float32),
+        "alpha_coeff": np.zeros_like(c_true, dtype=np.float32),
+        "alpha_power": 1.01,
+        "alpha_mode": "no_dispersion",
+    }
+    pulse = GaussianModulatedPulse(f0=f0, frac_bw=0.75, amp=1.0)
+
+    op = WaveOperator(
+        data=acq_geom,
+        medium_params=medium,
+        record_time=record_time,
+        record_full_wf=False,
+        use_encoding=False,
+        drop_self_rx=True,
+        pulse=pulse,
+        c_ref=c_ref,
+        use_gpu=use_gpu,
+        use_tqdm=use_tqdm,
+    )
+
+    # 5) Simulate and save
+    out = op.simulate()
+    out_path = (
+        SAVE_DIR / f"d_obs_{Ny}x{Nx}_{dx * 1e3:.0f}mm_{f0 / 1e6:.1f}MHz_{n_tx}.npz"
+    )
+    out.save(out_path)
+    print(f"[ok] Saved observations → {out_path}")
+
+
+if __name__ == "__main__":
+    main()

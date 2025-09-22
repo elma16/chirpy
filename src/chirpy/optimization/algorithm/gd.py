@@ -1,9 +1,9 @@
 from __future__ import annotations
 import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional
 import numpy as np
 
-from chirpy.utils.visulizer_multi_mode import Visualizer
+from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.optimization.function.least_squares import NonlinearLS
 from chirpy.data.image_data import ImageData
 

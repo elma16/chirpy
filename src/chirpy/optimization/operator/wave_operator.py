@@ -5,12 +5,11 @@ import copy
 import os
 import time
 from types import SimpleNamespace
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, Tuple
 import numpy as np
 from tqdm import tqdm
 
-from chirpy.data import AcquisitionData, ImageData
-from chirpy.geometry import TransducerArray2D, ImageGrid2D
+from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.base import Operator
 from chirpy.signals import Pulse, GaussianModulatedPulse
 
@@ -155,7 +154,7 @@ class WaveOperator(Operator):
         use_gpu: bool = False,
         verbose: bool = False,
         use_tqdm: bool = False,
-    ):
+    ):  # noqa: C901
         super().__init__()
 
         # ---------- cache / field pool -------------------------------
@@ -298,7 +297,7 @@ class WaveOperator(Operator):
         attrs = pulse.__dict__
         self._pulse_info = {
             "Type": type,
-            "attrs": {k: v for k, v in attrs.items()},
+            "attrs": dict(attrs),
         }
 
         # If the length is less than nt, pad zeros at the end; if it is longer, truncate it to nt.
@@ -474,8 +473,8 @@ class WaveOperator(Operator):
             ]  # element order (1, n_rx, nt)
             self._fields["obs_data_kw"] = enc_kw
             # logging
-            dmin = int(np.min(self.enc_delays)) if self.enc_delays is not None else 0
-            dmax = int(np.max(self.enc_delays)) if self.enc_delays is not None else 0
+            # dmin = int(np.min(self.enc_delays)) if self.enc_delays is not None else 0
+            # dmax = int(np.max(self.enc_delays)) if self.enc_delays is not None else 0
             # print(f"[TDO-ENC] renew   | shape=1×{self.n_rx_full}×{self.nt}, order=element, delays={dmin}-{dmax} samp, weights=±1")
 
     def get_field(self, key: str) -> np.ndarray:
@@ -602,7 +601,7 @@ class WaveOperator(Operator):
         self._update_medium_from_model(model, kind=kind)
         return self._forward_impl()
 
-    def _forward_impl(self) -> np.ndarray:
+    def _forward_impl(self) -> np.ndarray:  # noqa: C901
         """Run forward using the CURRENT self.medium (no parameter update here)."""
         # Generate encoding vectors once per forward run series
         if self.use_encoding and self.enc_weights is None:
