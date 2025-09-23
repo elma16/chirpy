@@ -24,6 +24,11 @@ from kwave.options.simulation_execution_options import (
 )
 
 
+# no-op callable (for zero-branch hot loops)
+def _noop(*_, **__):
+    return None
+
+
 # =========================================================================
 #   main operator
 # =========================================================================
@@ -84,6 +89,11 @@ class WaveOperator(Operator):
         Choose GPU (`kspace_first_order_2d_gpu`) or CPU (`kspaceFirstOrder2DC`) solver.
     verbose : bool, optional
         If True, let k-Wave print; otherwise suppress k-Wave stdout/stderr.
+    use_tqdm : bool, optional
+        If True, show tqdm progress bars for sequential shots.
+    shot_logs : bool, optional
+        If True, print per-shot lines (e.g., "42/64 ..."). If False, suppress
+        those lines to avoid interleaving with tqdm. Default False.
 
     Attributes
     ----------
@@ -120,18 +130,10 @@ class WaveOperator(Operator):
         'fwd_data_kw', 'wf_fwd', 'wf_adj'.
     _cache : SimpleNamespace | None
         Forward cache with last wavefields and model copies.
-
-    Notes
-    -----
-    - Input/output trace tensors presented to the user are always arranged in
-      **element order** (Tx, Rx, T). Internally, k-Wave uses **k-Wave order**
-      (column-major flattening of the 2D grid), and this class maintains
-      fast conversions between the two.
-    - In encoding mode, the forward returns `Tx=1` (single encoded shot).
     """
 
     # ------------------------------------------------------------------
-    def __init__(
+    def __init__( # noqa: C901
         self,
         data: AcquisitionData,
         medium_params: dict,
@@ -154,7 +156,8 @@ class WaveOperator(Operator):
         use_gpu: bool = False,
         verbose: bool = False,
         use_tqdm: bool = False,
-    ):  # noqa: C901
+        shot_logs: bool = False,
+    ):
         super().__init__()
 
         # ---------- cache / field pool -------------------------------
@@ -212,10 +215,7 @@ class WaveOperator(Operator):
         self.exec_opts = SimulationExecutionOptions(is_gpu_simulation=use_gpu)
 
         # ---------- 5. geometry --------------------------------------
-        # only tx positions are needed for transmitter
-        self.tx_pos = tx_array.tx_positions.astype(
-            float
-        )  # Keep it for subsequent use in the next launches.
+        self.tx_pos = tx_array.tx_positions.astype(float)
         self.n_tx = self.tx_pos.shape[1]
 
         # Source mask (k-Wave uses Fortran column-major linear indexing)
@@ -223,43 +223,33 @@ class WaveOperator(Operator):
         lin_idx = np.flatnonzero(self.src_mask.flatten(order="F"))
         self._row_map: Dict[int, int] = {idx: k for k, idx in enumerate(lin_idx)}
 
-        # The "global element index" sequence of the transmitter
-        # (consistent with the column sequence of tx_positions)
+        # "global element index" sequence of the transmitter
         self.tx_elem_indices = np.flatnonzero(tx_array.is_tx)
 
         # Full ring Rx info (using built-in mask directly)
         self.rx_mask = tx_array.get_rx_mask(self.img_grid).T
 
-        # The linear index and quantity of Rx in k-Wave order (Fortran column-major flat)
+        # Rx linear indices in k-Wave order
         self._rx_lin_idx_full = np.flatnonzero(self.rx_mask.flatten(order="F"))
         self.n_rx_full = int(self.rx_mask.sum())
         self._rx_lin_idx = self._rx_lin_idx_full
-        self.n_rx = self.n_rx_full  # The number of external Rx is always a whole ring.
+        self.n_rx = self.n_rx_full
 
         # ---------- 6. receiver masks -------------------------------
-        # The array elements are traversed in sequence; any element that
-        # falls on a grid point where rx_mask is True is regarded as an "active receiver".
         lin_each = []
         rx_elem_indices = []
         for i in range(tx_array.n_elements):
             x, y = tx_array.positions[:, i]
             ix, iy = self._xy2idx((x, y))
             if self.rx_mask[iy, ix]:
-                rx_elem_indices.append(
-                    i
-                )  # Record the "global element index" corresponding to this receiver.
+                rx_elem_indices.append(i)
                 lin_each.append(iy + ix * self.ny)  # Fortran: iy + ix*ny
         lin_each = np.asarray(lin_each, dtype=np.int64)
 
         lin_full = self._rx_lin_idx_full
-        # The position of "Array element order (only the enumeration order of the receiving subset) → k-Wave order"
         self.idx_elem2kw = np.searchsorted(lin_full, lin_each).astype(np.int64)
-        # Anti-permutation: k-Wave order → "Element order (only for the receiving subset)"
         self.idx_kw2elem = np.empty(self.n_rx_full, dtype=np.int64)
         self.idx_kw2elem[self.idx_elem2kw] = np.arange(self.n_rx_full, dtype=np.int64)
-
-        # (Optionally) If it is necessary to return from the "receiving subset enumeration index"
-        # to the "global element index" later, keep a mapping.
         self._rx_elem_indices = np.asarray(rx_elem_indices, dtype=np.int64)
 
         # --- per-Tx mask (only valid when sequential) ----------------
@@ -279,19 +269,18 @@ class WaveOperator(Operator):
 
         if self.drop_self_rx and not self.use_encoding:
             self.rx_mask_per_tx = np.empty((self.n_tx, self.ny, self.nx), dtype=bool)
-            # Note: The tx_idx of get_rx_mask_for_tx is the "global element index".
             for k, elem_idx in enumerate(self.tx_elem_indices):
                 self.rx_mask_per_tx[k] = tx_array.get_rx_mask_for_tx(
                     self.img_grid, elem_idx, True
                 ).T
 
         # ---------- 7. pulse -----------------------------------------
-        # Directly receive the Pulse object; if not provided, use the default Gaussian-modulated pulse.
         if pulse is None:
             default_pulse = GaussianModulatedPulse(f0=5e5, frac_bw=0.75, amp=1.0)
-            w = default_pulse.sample(self.dt, self.nt)  # shape=(nt,)
+            w = default_pulse.sample(self.dt, self.nt)
+            pulse = default_pulse
         else:
-            w = pulse.sample(self.dt, self.nt)  # shape=(nt,)
+            w = pulse.sample(self.dt, self.nt)
 
         type = pulse.__class__.__name__
         attrs = pulse.__dict__
@@ -300,13 +289,10 @@ class WaveOperator(Operator):
             "attrs": dict(attrs),
         }
 
-        # If the length is less than nt, pad zeros at the end; if it is longer, truncate it to nt.
         if w.size < self.nt:
             w = np.pad(w, (0, self.nt - w.size))
         elif w.size > self.nt:
             w = w[: self.nt]
-
-        # Save as (1, nt) for k-Wave to use.
         self.pulse = w[np.newaxis, :].astype(np.float32)
 
         # ---------- 8. sensors  --------------------------
@@ -315,12 +301,9 @@ class WaveOperator(Operator):
 
         # ---------- 9. runtime cache ---------------------------------
         self._cache: Optional[SimpleNamespace] = None
-        self.obs_data_full: Optional[np.ndarray] = (
-            None  # (Tx, n_rx_full, nt) in k-Wave order
-        )
+        self.obs_data_full: Optional[np.ndarray] = None
 
         # ---------- 10. user-provided obs ----------------------------
-        # Agreement: The Rx dimension of the AcquisitionData.array passed in from the outside is the "element sequence".
         if data.array is not None:
             if data.array.shape[0] != self.n_tx:
                 print(
@@ -334,36 +317,40 @@ class WaveOperator(Operator):
                 raise ValueError(
                     f"AcquisitionData second dim must be {self.n_rx_full} (full-ring)."
                 )
-            # Element sequence → k-Wave sequence
             data_kw = data.array[:, self.idx_kw2elem, :].astype(np.float64, copy=False)
             if self.use_encoding:
-                self.set_obs(
-                    data_kw[:, self.idx_elem2kw, :]
-                )  # The expected element sequence of set_obs; reverse recovery here.
+                self.set_obs(data_kw[:, self.idx_elem2kw, :])
             else:
-                # The internal sequence of kw is saved, and the external field provides the element sequence.
                 self.obs_data_full = data_kw
                 self._fields["obs_data"] = self.obs_data_full[:, self.idx_elem2kw, :]
                 self._fields["obs_data_kw"] = self.obs_data_full
 
         # ---------- 11. misc -----------------------------------------
         self.src_mode = str(src_mode).lower()
-
         self._src_scale = 1.0 if scale_source_terms else 1.0
 
-        # ---- Init print (one line, coordinated with gradient style) --
         print(
             "[WaveOperator] Init → "
             f"Tx={self.n_tx}, Rx={self.n_rx_full}, nt={self.nt}, dt={self.dt:.3e}s, "
             f"grid=({self.ny}×{self.nx},{self.dy:.2e}×{self.dx:.2e}m), "
             f"c_ref={self.c_ref:.1f}m/s, cfl={cfl}, pml={pml_size}, enc={self.use_encoding}, "
             f"tau_max={self.tau_max:.3e}s, dsrx={self.drop_self_rx}, full_wf={self.record_full_wf}, "
-            f"src_mode={self.src_mode}, rx_order=element,"
-            f" pulse={self._pulse_info}"
+            f"src_mode={self.src_mode}, rx_order=element, pulse={self._pulse_info}"
         )
 
         self.verbose = verbose
         self.use_tqdm = use_tqdm
+        self.shot_logs = bool(shot_logs)
+
+        # -------- per-shot logging setup (zero-branch in loops) ------
+        width = len(str(self.n_tx or 1))
+        self._fwd_line_fmt = (
+            f"[TDO-FWD] {{i:0{width}d}}/{{n}} | tx=({{x:+.3f}},{{y:+.3f}})m | "
+            f"nt={{nt}}, rx={{rx}} |  done in {{t:.2f}}s"
+        )
+        self._adj_line_fmt = f"[TDO-ADJ] {{i:0{width}d}}/{{n}} | nt={{nt}}, rx={{rx}} | done in {{t:.2f}}s"
+        self._per_shot_log_fwd = self._log_shot_fwd if self.shot_logs else _noop
+        self._per_shot_log_adj = self._log_shot_adj if self.shot_logs else _noop
 
     # ================================================================
     # helpers
@@ -421,23 +408,20 @@ class WaveOperator(Operator):
             pad_len = self.nt - data_tx_rx_t.shape[-1]
             data_tx_rx_t = np.pad(data_tx_rx_t, ((0, 0), (0, 0), (0, pad_len)))
 
-        # Element sequence → k-Wave sequence
         data_kw = data_tx_rx_t[:, self.idx_kw2elem, :]
         self.obs_data_full = data_kw.astype(np.float64, copy=False)
 
-        # External field: Element sequence
         if self.use_encoding:
             if self.enc_weights is not None:
                 self.renew_encoded_obs()
             else:
-                enc_kw = self.obs_data_full  # Not encoded yet
+                enc_kw = self.obs_data_full
                 self._fields["obs_data"] = enc_kw[:, self.idx_elem2kw, :]
                 self._fields["obs_data_kw"] = enc_kw
         else:
             self._fields["obs_data"] = self.obs_data_full[:, self.idx_elem2kw, :]
             self._fields["obs_data_kw"] = self.obs_data_full
 
-        # logging
         Tx, Rx, nt = data_tx_rx_t.shape
         print(
             f"[TDO-ENC] set_obs | shape={Tx}×{Rx}×{nt}, order=element, pad={pad_len} samp"
@@ -468,14 +452,9 @@ class WaveOperator(Operator):
     def renew_encoded_obs(self):
         if self.use_encoding:
             enc_kw = self.get_encoded_obs()  # k-Wave order (1, n_rx_full, nt)
-            self._fields["obs_data"] = enc_kw[
-                :, self.idx_elem2kw, :
-            ]  # element order (1, n_rx, nt)
+            self._fields["obs_data"] = enc_kw[:, self.idx_elem2kw, :]  # element order
             self._fields["obs_data_kw"] = enc_kw
-            # logging
-            # dmin = int(np.min(self.enc_delays)) if self.enc_delays is not None else 0
-            # dmax = int(np.max(self.enc_delays)) if self.enc_delays is not None else 0
-            # print(f"[TDO-ENC] renew   | shape=1×{self.n_rx_full}×{self.nt}, order=element, delays={dmin}-{dmax} samp, weights=±1")
+            # (delays/weights logging intentionally suppressed)
 
     def get_field(self, key: str) -> np.ndarray:
         if key not in self._fields:
@@ -483,13 +462,35 @@ class WaveOperator(Operator):
         return self._fields[key]
 
     def _n_rx_print(self, tx_idx: Optional[int] = None) -> int:
-        # In encoding mode, it is always a complete loop;
-        # when not encoding and discarding from self-reception, count according to the current TX mask.
         if self.use_encoding:
             return self.n_rx_full
         if self.drop_self_rx and tx_idx is not None:
             return int(self.rx_mask_per_tx[tx_idx].sum())
         return self.n_rx_full
+
+    # ================================================================
+    # low-level logging helpers (bound to no-op when shot_logs=False)
+    # ================================================================
+    def _log_shot_fwd(
+        self, i: int, x: float, y: float, t_i: float, nrx: int, tx_iterator
+    ):
+        if self.use_tqdm and hasattr(tx_iterator, "set_postfix"):
+            # Only add postfix when shot_logs=True to keep bar clean otherwise
+            tx_iterator.set_postfix(
+                {"tx": f"({x:+.3f},{y:+.3f})", "rx": nrx, "t": f"{t_i:.2f}s"}
+            )
+        elif not self.use_tqdm:
+            print(
+                self._fwd_line_fmt.format(
+                    i=i + 1, n=self.n_tx, x=x, y=y, nt=self.nt, rx=nrx, t=t_i
+                )
+            )
+
+    def _log_shot_adj(self, tx: int, t_i: float, nrx: int, N: int, tx_iterator):
+        if self.use_tqdm and hasattr(tx_iterator, "set_postfix"):
+            tx_iterator.set_postfix({"rx": nrx, "t": f"{t_i:.2f}s"})
+        elif not self.use_tqdm:
+            print(self._adj_line_fmt.format(i=tx + 1, n=N, nt=self.nt, rx=nrx, t=t_i))
 
     # ================================================================
     # k-Wave low-level wrapper
@@ -513,7 +514,6 @@ class WaveOperator(Operator):
         ks.p = p_mat
         ks.p_mode = self.src_mode
 
-        # The mask collected by k-Wave (when full_wf=True, to obtain the full wave field, the sensor is still set to the entire domain)
         if full_wf:
             raw_mask = np.ones((self.ny, self.nx), bool)
         else:
@@ -539,37 +539,35 @@ class WaveOperator(Operator):
 
         # ------------------ full wavefield branch --------------------
         if full_wf:
-            # out["p"] is (nt, ny*nx)
-            raw = out["p"]
+            raw = out["p"]  # (nt, ny*nx)
             wf = self._reshape(raw, self.nt, self.ny, self.nx)
 
             if sensor_mask_override is None:
-                # full ring
                 lin_cur = self._rx_lin_idx_full
-                rec_used = raw[:, lin_cur].T  # (n_rx_full, nt) in k-Wave order
+                rec_used = raw[:, lin_cur].T  # (n_rx_full, nt)
                 rec_full = rec_used
             else:
                 lin_full = self._rx_lin_idx_full
                 lin_cur = np.flatnonzero(sensor_mask_override.flatten(order="F"))
-                rec_used = raw[:, lin_cur].T  # (n_rx_cur, nt)
+                rec_used = raw[:, lin_cur].T
                 pos = np.searchsorted(lin_full, lin_cur)
                 rec_full = np.zeros((self.n_rx_full, self.nt), dtype=rec_used.dtype)
                 rec_full[pos, :] = rec_used
 
-            return wf, rec_full  # rec_full is (n_rx_full, nt) in k-Wave order
+            return wf, rec_full  # (n_rx_full, nt)
 
         # ------------------ only sensor traces branch ----------------
         raw = out["p"]  # (nt, n_rx_current)
 
         if sensor_mask_override is None:
-            return None, raw.T  # (n_rx_full, nt) in k-Wave order
+            return None, raw.T
 
         lin_full = self._rx_lin_idx_full
         lin_cur = np.flatnonzero(sensor_mask_override.flatten(order="F"))
         pos = np.searchsorted(lin_full, lin_cur)
         rec_full = np.zeros((self.n_rx_full, self.nt), dtype=raw.dtype)
         rec_full[pos, :] = raw.T
-        return None, rec_full  # k-Wave order (n_rx_full, nt)
+        return None, rec_full
 
     # ================================================================
     # forward
@@ -577,26 +575,6 @@ class WaveOperator(Operator):
     def forward(self, model: np.ndarray, *, kind: str = "c") -> np.ndarray:
         """
         Compute forward sensor traces after updating exactly one parameter.
-
-        Parameters
-        ----------
-        model : np.ndarray, shape (ny, nx), dtype float32
-            Parameter map to apply (velocity or attenuation).
-        kind : {'c', 'alpha'}, optional
-            Which parameter `model` represents. Default 'c'.
-
-        Returns
-        -------
-        np.ndarray
-            Predicted traces in **element order**, shape:
-              - (1, n_rx_full, nt) in encoding mode,
-              - (n_tx, n_rx_full, nt) in sequential (non-encoding) mode.
-
-        Side Effects
-        ------------
-        - Updates internal medium and model caches.
-        - Populates `_fields['fwd_data']` (element order) and `_fields['fwd_data_kw']`
-          (k-Wave order). If `record_full_wf=True`, also stores `_fields['wf_fwd']`.
         """
         self._update_medium_from_model(model, kind=kind)
         return self._forward_impl()
@@ -649,8 +627,6 @@ class WaveOperator(Operator):
         # ---------- sequential --------------------------------------
         else:
             mask_single = np.zeros_like(self.src_mask)
-            # progress width
-            w = len(str(self.n_tx))
             t_sum = 0.0
             t_all_start = time.time()
 
@@ -672,7 +648,6 @@ class WaveOperator(Operator):
                 ix, iy = self._xy2idx((x, y))
                 mask_single[iy, ix] = True
 
-                # Each independent pulse of Tx avoids side effects caused by modifications at the lower level.
                 pulse_single = (self.pulse / self._src_scale).astype(
                     np.float32, copy=True
                 )
@@ -694,36 +669,18 @@ class WaveOperator(Operator):
                 t_i = time.time() - start_i
                 t_sum += t_i
 
-                nrx = self._n_rx_print(i)  # current Tx's Rx count
-                print(
-                    f"[TDO-FWD] {i + 1:0{w}d}/{self.n_tx} | tx=({x:+.3f},{y:+.3f})m | nt={self.nt}, rx={nrx} |  done in {t_i:.2f}s"
-                )
-
-            if self.use_tqdm:
-                tx_iterator.set_postfix(
-                    {
-                        "tx_pos": f"({x:+.3f},{y:+.3f})m",
-                        "rx": nrx,
-                        "time": f"{t_i:.2f}s",
-                    }
-                )
-            else:
-                w = len(str(self.n_tx))
-                print(
-                    f"[TDO-FWD] {i + 1:0{w}d}/{self.n_tx} | tx=({x:+.3f},{y:+.3f})m | nt={self.nt}, rx={nrx} |  done in {t_i:.2f}s"
-                )
+                nrx = self._n_rx_print(i)
+                # one call; bound to real logger or no-op
+                self._per_shot_log_fwd(i, x, y, t_i, nrx, tx_iterator)
 
             total = time.time() - t_all_start
             mean_shot = t_sum / self.n_tx if self.n_tx > 0 else 0.0
-
             print(
                 f"[TDO-FWD] Done | shots={self.n_tx}, total={total:.2f}s, mean/shot={mean_shot:.2f}s"
             )
 
         # k-Wave returns (nt, n_rx_full) in column-major order
-        Fm_kw = np.concatenate(REC_list, axis=0).astype(
-            np.float64
-        )  # (Tx or 1, n_rx_full, nt)
+        Fm_kw = np.concatenate(REC_list, axis=0).astype(np.float64)
 
         # Convert to element order (Tx, n_rx, nt) for external use
         Fm = Fm_kw[:, self.idx_elem2kw, :]
@@ -733,8 +690,8 @@ class WaveOperator(Operator):
             model_a=self.model_a.copy(),
             WF=(np.stack(WF_list) if WF_list else None),
         )
-        self._fields["fwd_data"] = Fm  # element order (Tx, n_rx, nt)
-        self._fields["fwd_data_kw"] = Fm_kw  # k-Wave order (Tx or 1, n_rx_full, nt)
+        self._fields["fwd_data"] = Fm
+        self._fields["fwd_data_kw"] = Fm_kw
         if full and WF_list:
             self._fields["wf_fwd"] = self._cache.WF
         return Fm
@@ -745,26 +702,6 @@ class WaveOperator(Operator):
     def adjoint(self, residual: np.ndarray) -> np.ndarray:
         """
         Back-propagate sensor residuals (batch version).
-
-        Parameters
-        ----------
-        residual : np.ndarray
-            Residual traces in **element order**:
-              - (1, n_rx_full, nt) when `use_encoding=True`,
-              - (n_tx, n_rx_full, nt) otherwise.
-
-        Returns
-        -------
-        np.ndarray
-            Adjoint wavefield λ(t, y, x) with shape (nt, ny, nx), dtype float64.
-
-        Notes
-        -----
-        - Residuals are converted to k-Wave order, time-reversed, integrated over
-          time (cumulative sum × dt) to obtain pressure, and used as a k-Wave source.
-        - In non-encoding mode, loops over Tx; when `drop_self_rx=True`, the sensor
-          subset for that Tx is respected.
-        - Stores the result in `_fields['wf_adj']`.
         """
         lam = np.zeros((self.nt, self.ny, self.nx), np.float32)
 
@@ -775,20 +712,17 @@ class WaveOperator(Operator):
             t0 = time.time()
             q_rev = residual_kw[0][:, ::-1]  # (n_rx_full, nt)
 
-            q_rev = np.cumsum(q_rev, axis=1) * self.dt  # integrate to get pressure
+            q_rev = np.cumsum(q_rev, axis=1) * self.dt
             p_src = q_rev / self._src_scale
 
             wf, _ = self._run_sim(self.rx_mask, p_src, full_wf=True)
             lam += wf[::-1]
 
             elapsed = time.time() - t0
-
             nrx = self._n_rx_print()
-
             print(f"[TDO-ADJ] enc | nt={self.nt}, rx={nrx} | done in {elapsed:.2f}s")
         else:
             N = residual_kw.shape[0]
-            w = len(str(N))
             t_sum = 0.0
             t_all_start = time.time()
 
@@ -811,10 +745,7 @@ class WaveOperator(Operator):
                     pos = np.searchsorted(lin_full, lin_cur)
 
                     q_rev_used = residual_kw[tx][pos][:, ::-1]
-
-                    q_rev_used = (
-                        np.cumsum(q_rev_used, axis=1) * self.dt
-                    )  # integrate to get pressure
+                    q_rev_used = np.cumsum(q_rev_used, axis=1) * self.dt
                     p_src = q_rev_used / self._src_scale
 
                     wf, _ = self._run_sim(
@@ -825,9 +756,7 @@ class WaveOperator(Operator):
                     )
                 else:
                     q_rev = residual_kw[tx][:, ::-1]
-                    q_rev = (
-                        np.cumsum(q_rev, axis=1) * self.dt
-                    )  # integrate to get pressure
+                    q_rev = np.cumsum(q_rev, axis=1) * self.dt
                     p_src = q_rev / self._src_scale
                     wf, _ = self._run_sim(self.rx_mask, p_src, full_wf=True)
 
@@ -837,15 +766,8 @@ class WaveOperator(Operator):
                 t_sum += t_i
 
                 nrx = self._n_rx_print(tx)
-
-                # Update progress bar or print progress
-                if self.use_tqdm:
-                    tx_iterator.set_postfix({"rx": nrx, "time": f"{t_i:.2f}s"})
-                else:
-                    w = len(str(N))
-                    print(
-                        f"[TDO-ADJ] {tx + 1:0{w}d}/{N} | nt={self.nt}, rx={nrx} | done in {t_i:.2f}s"
-                    )
+                # one call; bound to real logger or no-op
+                self._per_shot_log_adj(tx, t_i, nrx, N, tx_iterator)
 
             total = time.time() - t_all_start
             mean_shot = t_sum / N if N > 0 else 0.0
@@ -863,18 +785,6 @@ class WaveOperator(Operator):
     def adjoint_one_tx(self, residual_tx: np.ndarray, tx_idx: int) -> np.ndarray:
         """
         Back-propagate the residual for ONE Tx (non-encoding mode).
-
-        Parameters
-        ----------
-        residual_tx : (n_rx_full, nt) array
-            Residual trace for the given Tx,
-        tx_idx : int
-            The global Tx index (0-based).
-
-        Returns
-        -------
-        lam : (nt, ny, nx) float64
-            The adjoint wavefield corresponding to this Tx residual.
         """
         if self.use_encoding:
             raise RuntimeError("adjoint_one_tx() is only meant for non-encoding mode.")
@@ -905,9 +815,7 @@ class WaveOperator(Operator):
         pos = np.searchsorted(lin_full, lin_cur)
 
         q_rev_used = residual_kw[pos][:, ::-1]
-        q_rev_used = (
-            np.cumsum(q_rev_used, axis=1) * self.dt
-        )  # integrate to get pressure
+        q_rev_used = np.cumsum(q_rev_used, axis=1) * self.dt
         p_src = q_rev_used / self._src_scale
 
         wf, _ = self._run_sim(
@@ -923,10 +831,10 @@ class WaveOperator(Operator):
         end = time.time()
 
         nrx = self._n_rx_print(tx_idx)
-
-        print(
-            f"[TDO-ADJ] one_tx | tx={tx_idx + 1}/{self.n_tx} | nt={self.nt}, rx={nrx} | done in {end - start:.2f}s"
-        )
+        if self.shot_logs:
+            print(
+                f"[TDO-ADJ] one_tx | tx={tx_idx + 1}/{self.n_tx} | nt={self.nt}, rx={nrx} | done in {end - start:.2f}s"
+            )
         return lam
 
     # ================================================================

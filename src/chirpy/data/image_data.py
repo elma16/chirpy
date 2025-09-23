@@ -122,7 +122,7 @@ class ImageData(DataContainer):
         """
         np.savez(path, current=self.array, history=np.stack(self.history), **self.ctx)
 
-    def show(
+    def show( # noqa
         self,
         idx: int = -1,
         *,
@@ -137,7 +137,7 @@ class ImageData(DataContainer):
         figsize: tuple[int, int] | None = None,
         show_grid: bool = False,
         **imshow_kw,
-    ):  # noqa: C901
+    ):
         """
         Visualize a snapshot from history with optional overlays.
 

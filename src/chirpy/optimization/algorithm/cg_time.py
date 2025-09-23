@@ -160,7 +160,7 @@ class CG_Time(Optimizer):
             print(f"    Armijo failed, returning last trial a={a:.3e}, Φ={f_try:.3e}")
         return a, f_try
 
-    def _step(
+    def _step(  # noqa: C901
         self,
         g_raw: np.ndarray,
         m: ImageData,
@@ -168,7 +168,7 @@ class CG_Time(Optimizer):
         *,
         kind: str,
         verb: bool = False,
-    ):  # noqa: C901
+    ):
         """
         Perform a single step of the CG_Time algorithm.
         """

@@ -33,13 +33,13 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = Path.cwd().parent
+ROOT_DIR = Path.cwd()
 DATA_DIR = ROOT_DIR / "data"
 SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
 Path("Results").mkdir(exist_ok=True)
 
-RAW_MAT = Path("SampleData/kWave_BreastCT.mat")  # unchanged assumption
+RAW_MAT = Path(DATA_DIR / "kWave_BreastCT.mat")  # unchanged assumption
 
 dxi = 0.6e-3
 xmax = 120e-3

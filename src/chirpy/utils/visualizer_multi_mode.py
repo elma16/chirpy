@@ -243,9 +243,9 @@ class Visualizer:
         return vmin, vmax
 
     # -----------------------------------------------------------------
-    def update(
+    def update( # noqa: C901
         self, *, vel_est=None, atten_est=None, grad=None, search_dir=None, title=None
-    ):  # noqa: C901
+    ):
         self.global_iter += 1
         k = self.global_iter
 

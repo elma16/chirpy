@@ -24,7 +24,7 @@ class ImageGrid2D(Geometry):
         yi[i] = (i - (ny - 1)/2) * dy.
     """
 
-    def __init__(
+    def __init__( # noqa: C901
         self,
         *,
         # explicit coords
@@ -40,7 +40,7 @@ class ImageGrid2D(Geometry):
         ymax: float | None = None,
         # limits
         n_max: int | None = None,
-    ):  # noqa: C901
+    ):
         # -------------------------------------------------------------
         # 1) explicit coordinate arrays
         # -------------------------------------------------------------

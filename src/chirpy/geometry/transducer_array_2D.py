@@ -258,7 +258,7 @@ class TransducerArray2D(Geometry):
         # Update base class shape
         self.shape = (self.positions.shape[1],)
 
-    def edit(
+    def edit( # noqa 
         self,
         *,
         index: Optional[int] = None,
@@ -267,7 +267,7 @@ class TransducerArray2D(Geometry):
         is_tx: Optional[bool] = None,
         is_rx: Optional[bool] = None,
         new_id: Optional[object] = None,
-    ) -> None:  # noqa: C901
+    ) -> None:
         """
         Edit a transducer's attributes in-place.
 

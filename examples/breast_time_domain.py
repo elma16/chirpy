@@ -24,7 +24,7 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = Path.cwd().parent
+ROOT_DIR = Path.cwd()
 DATA_DIR = ROOT_DIR / "data"
 SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
