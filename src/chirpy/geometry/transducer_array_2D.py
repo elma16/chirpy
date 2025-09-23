@@ -258,7 +258,7 @@ class TransducerArray2D(Geometry):
         # Update base class shape
         self.shape = (self.positions.shape[1],)
 
-    def edit( # noqa 
+    def edit(  # noqa
         self,
         *,
         index: Optional[int] = None,

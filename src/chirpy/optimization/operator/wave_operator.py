@@ -133,7 +133,7 @@ class WaveOperator(Operator):
     """
 
     # ------------------------------------------------------------------
-    def __init__( # noqa: C901
+    def __init__(  # noqa: C901
         self,
         data: AcquisitionData,
         medium_params: dict,

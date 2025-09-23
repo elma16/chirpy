@@ -19,6 +19,7 @@ from chirpy.optimization.algorithm.cg import CG
 from chirpy.optimization.operator.helmholtz import HelmholtzOperator
 from chirpy.optimization.gradient.adjoint_helmholtz import HelmholtzAdjointGrad
 from chirpy.utils.visualizer_multi_mode import Visualizer
+from chirpy.utils.paths import detect_root
 
 """
 Breast inversion (frequency domain, Helmholtz).
@@ -33,7 +34,7 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = Path.cwd()
+ROOT_DIR = detect_root()
 DATA_DIR = ROOT_DIR / "data"
 SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)

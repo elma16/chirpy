@@ -1,4 +1,3 @@
-from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
@@ -7,6 +6,7 @@ from chirpy.data import AcquisitionData
 from chirpy.data.image_data import ImageData
 from chirpy.optimization.operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
+from chirpy.utils.paths import detect_root
 
 """
 Breast phantom simulation (time domain).
@@ -20,7 +20,7 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = Path.cwd()
+ROOT_DIR = detect_root()
 DATA_DIR = ROOT_DIR / "data"
 SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)

@@ -1,4 +1,3 @@
-from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -11,6 +10,7 @@ from chirpy.optimization.algorithm.gd import GD
 from chirpy.optimization.algorithm.cg_time import CG_Time
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
+from chirpy.utils.paths import detect_root
 
 """
 Two-circle time-domain inversion demo.
@@ -24,7 +24,7 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = Path.cwd()
+ROOT_DIR = detect_root()
 SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
 

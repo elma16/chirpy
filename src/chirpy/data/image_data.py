@@ -122,7 +122,7 @@ class ImageData(DataContainer):
         """
         np.savez(path, current=self.array, history=np.stack(self.history), **self.ctx)
 
-    def show( # noqa
+    def show(  # noqa
         self,
         idx: int = -1,
         *,

@@ -1,4 +1,3 @@
-from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
@@ -11,6 +10,7 @@ from chirpy.optimization.function import NonlinearLS
 from chirpy.optimization.algorithm import GD, CG_Time
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
+from chirpy.utils.paths import detect_root
 
 """
 Breast phantom inversion (time domain) using precomputed observations.
@@ -24,7 +24,7 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = Path.cwd()
+ROOT_DIR = detect_root()
 DATA_DIR = ROOT_DIR / "data"
 SAVE_DIR = ROOT_DIR / "outputs"
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
