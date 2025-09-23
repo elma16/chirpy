@@ -42,6 +42,7 @@ pip install .[gpu]
 
 ```bash
 pip install .[dev]
+pre-commit install
 ```
 
 ## References
