@@ -6,7 +6,7 @@ Non-linear Conjugate Gradient (CG_Time) optimizer for Helmholtz full-waveform in
 
 Key Features
 ------------
-- **Polak–Ribiere update** with Fletcher–Reeves upper bound:
+- **Polak-Ribiere update** with Fletcher-Reeves upper bound:
 
       beta_k = min( max( (g_k · (g_k - g_{k-1})) / (g_{k-1} · g_{k-1}), 0 ),
                    (g_k · g_k) / (g_{k-1} · g_{k-1}) )
@@ -70,6 +70,7 @@ from chirpy.optimization.operator.functions.ringingRemovalFilt import ringingRem
 from chirpy.optimization.operator.helmholtz import HelmholtzOperator
 from chirpy.optimization.function.least_squares import NonlinearLS
 from chirpy.optimization.algorithm.base import Optimizer
+from chirpy.utils.progress import Progress, ProgressConfig
 
 
 class CG(Optimizer):
@@ -100,12 +101,13 @@ class CG(Optimizer):
         c1: float = 1e-4,
         shrink: float = 0.5,
         max_ls: int = 20,
+        progress: Progress | None = None,
     ):
         if mode not in ("full", "real", "imag"):
             raise ValueError("mode must be 'full', 'real' or 'imag'")
         self._mode = mode
         self._c1, self._sh, self._max = float(c1), float(shrink), int(max_ls)
-        self._d = self._g_prev = None  # CG_Time state
+        self._d = self._g_prev = None  # CG state
 
         # recorder & visualiser buffers
         self._rec: Dict[str, List[np.ndarray]] = {
@@ -113,6 +115,9 @@ class CG(Optimizer):
         }
         self._vis_grad: np.ndarray | None = None
         self._vis_search: np.ndarray | None = None
+
+        # unified progress (no-op by default)
+        self._progress = progress or Progress(ProgressConfig(enabled=False))
 
     # ---------------- helper fns ---------------- #
     @staticmethod
@@ -228,16 +233,19 @@ class CG(Optimizer):
 
         op = fun._op
 
-        for k in range(1, n_iter + 1):
+        it = self._progress.iter(
+            range(1, n_iter + 1),
+            total=n_iter,
+            desc=f"CG[{mode}]",
+            unit="iter",
+        )
+        for k in it:
             t0 = time.time()
             g = self.step(g, m0, fun)
             t1 = time.time()
 
             if do_print_time:
                 print(f"[Mode={mode}] Iter {k}/{n_iter}   {t1 - t0:6.2f}s")
-
-            # if viz is not None:
-            #     viz.update(m0.current, self._vis_grad, self._vis_search)
 
             if viz is not None:
                 vel = 1.0 / np.maximum(np.real(m0.array), 1e-12)
@@ -260,6 +268,18 @@ class CG(Optimizer):
                         search_dir=self._vis_search,
                         title=f"f={fun._op._freq / 1e6:.3f} MHz, iter {k}",
                     )
+
+            # Optional progress postfix (only when tqdm-like backend is active)
+            if hasattr(it, "set_postfix") and (self._vis_grad is not None):
+                try:
+                    it.set_postfix(
+                        {
+                            "Φ": f"{float(fun.last_misfit):.3e}",
+                            "|g|∞": f"{float(np.max(np.abs(self._vis_grad))):.2e}",
+                        }
+                    )
+                except Exception:
+                    pass
 
         return m0
 

@@ -10,7 +10,6 @@ This project is a fork and extension of the original work by Wei Liao ([original
 
 For time domain simulation, [k-Wave-python](https://github.com/waltsims/k-wave-python) is used. This has support for CPU and GPU hardware. For frequency domain simulation on a GPU [CuPy](https://cupy.dev/) is used. 
 
-
 ## Installation
 
 ### Prerequisites
@@ -27,6 +26,8 @@ git clone https://github.com/elma16/chirpy.git
 cd chirpy
 pip install .
 ```
+
+Users should also be aware of [some data made available by Wei](https://github.com/weiliao001211/PHAS0077-Research-Project/releases/tag/data).
 
 ### GPU-Accelerated Installation
 

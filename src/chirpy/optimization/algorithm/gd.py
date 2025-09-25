@@ -1,11 +1,12 @@
 from __future__ import annotations
-import time
 from typing import Callable, Dict, List, Optional
 import numpy as np
 
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.optimization.function.least_squares import NonlinearLS
 from chirpy.data.image_data import ImageData
+from chirpy.utils.progress import Progress, ProgressConfig
+
 
 _VEL_MIN, _VEL_MAX = 800.0, 2500.0
 _ALPHA_FLOOR, _ALPHA_CEIL = 1.0e-7, 20.0
@@ -44,6 +45,7 @@ class GD:
         max_bt: int = 10,
         schedule_fn: Callable[[int, float], float] | None = None,
         viz: Optional[Visualizer] = None,
+        progress: Progress | None = None,
     ) -> None:
         """
         Parameters
@@ -88,6 +90,8 @@ class GD:
         self._max_bt = int(max_bt)
         self._schedule = schedule_fn
         self._viz = viz
+        self._progress = progress or Progress(ProgressConfig(enabled=False))
+
         # record
         self._rec: Dict[str, List[np.ndarray]] = {
             "vel": [],
@@ -269,8 +273,6 @@ class GD:
         print("=" * len(hdr))
         print(hdr)
 
-        t0 = time.time()
-
         # initialize model
         phi = float(fun.value(m0.array, kind=kind)) if self._backtrack else None
         grad = fun.gradient(m0.array, kind=kind)
@@ -283,9 +285,8 @@ class GD:
                 f"[init] |g0|∞={g0_inf:.3e}  η0(lr)={self._lr0:.3e}  misfit0={float(fun.last_misfit):.3e}"
             )
 
-        for k in range(n_iter):
-            tic = time.time()
-
+        it = self._progress.iter(range(n_iter), total=n_iter, desc="GD", unit="iter")
+        for k in it:
             # search direction is the negative gradient
             search_dir = -grad
 
@@ -299,7 +300,6 @@ class GD:
                 kind=kind,
             )
 
-            # update the visualizer if provided
             if self._viz:
                 if kind == "c":
                     vel_est = m0.array
@@ -316,12 +316,17 @@ class GD:
                     title=title,
                 )
 
-            dt = time.time() - tic
-            if verbose:
-                print(
-                    f">>>>> iter {k + 1:3d}/{n_iter} done "
-                    f"({dt:4.1f}s | total {time.time() - t0:4.1f}s)"
-                )
+            # optional postfix (only if tqdm-like backend is active)
+            if hasattr(it, "set_postfix"):
+                try:
+                    it.set_postfix(
+                        {
+                            "|g|∞": f"{float(np.max(np.abs(grad))):.2e}",
+                            "Φ": f"{float(fun.last_misfit):.3e}",
+                        }
+                    )
+                except Exception:
+                    pass
 
         return m0
 

@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
+from pathlib import Path
 
 from chirpy.geometry import ImageGrid2D, TransducerArray2D
 from chirpy.data import AcquisitionData, ImageData
@@ -11,6 +12,7 @@ from chirpy.optimization.algorithm import GD, CG_Time
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
 from chirpy.utils.paths import detect_root
+from chirpy.utils.progress import Progress, ProgressConfig
 
 """
 Breast phantom inversion (time domain) using precomputed observations.
@@ -25,9 +27,11 @@ Process:
 
 # --------------------------- Configuration --------------------------- #
 ROOT_DIR = detect_root()
-DATA_DIR = ROOT_DIR / "data"
-SAVE_DIR = ROOT_DIR / "outputs"
+DATA_DIR = Path(ROOT_DIR / "data")
+SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
+
+progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
 # Inversion controls
 USE_ENCODING = True
@@ -95,7 +99,7 @@ def main() -> None:
         pulse=pulse,
         c_ref=c_ref,
         use_gpu=use_gpu,
-        use_tqdm=use_tqdm,
+        progress=progress,
     )
     grad = AdjointStateGrad(op, K=(K if (USE_ENCODING and K > 1) else None), seed=0)
     f_ls = NonlinearLS(op, grad_eval=grad, normalize=NORMALIZE)
@@ -111,7 +115,7 @@ def main() -> None:
     )
 
     if ALGO == "CG_Time":
-        solver = CG_Time(viz=viz)
+        solver = CG_Time(viz=viz, progress=progress)
     else:
         solver = GD(
             lr=50 * ETA0,
@@ -119,6 +123,7 @@ def main() -> None:
             max_bt=12,
             schedule_fn=lambda k, lr0: lr0,
             viz=viz,
+            progress=progress,
         )
 
     solver.solve(fun=f_ls, m0=m0, kind="c", n_iter=N_ITER)

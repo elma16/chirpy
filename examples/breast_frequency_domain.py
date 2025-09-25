@@ -20,6 +20,7 @@ from chirpy.optimization.operator.helmholtz import HelmholtzOperator
 from chirpy.optimization.gradient.adjoint_helmholtz import HelmholtzAdjointGrad
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.utils.paths import detect_root
+from chirpy.utils.progress import Progress, ProgressConfig
 
 """
 Breast inversion (frequency domain, Helmholtz).
@@ -35,12 +36,13 @@ Process:
 
 # --------------------------- Configuration --------------------------- #
 ROOT_DIR = detect_root()
-DATA_DIR = ROOT_DIR / "data"
-SAVE_DIR = ROOT_DIR / "outputs"
+DATA_DIR = Path(ROOT_DIR / "data")
+SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
-Path("Results").mkdir(exist_ok=True)
 
-RAW_MAT = Path(DATA_DIR / "kWave_BreastCT.mat")  # unchanged assumption
+RAW_MAT = Path(DATA_DIR / "kWave_BreastCT.mat")
+
+progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
 dxi = 0.6e-3
 xmax = 120e-3
@@ -49,6 +51,7 @@ c0 = 1540.0
 f_sos = np.arange(0.3, 1.3, 0.05) * 1e6
 f_att = np.arange(0.325, 1.325, 0.05) * 1e6
 freqs = np.concatenate([f_sos, f_att])
+use_gpu = False
 
 
 def main() -> None:
@@ -112,7 +115,15 @@ def main() -> None:
     cg = CG(c1=1e-4, shrink=0.5, max_ls=20)
     for k in range(Nf):
         print(f"\n=== freq {k}/{Nf - 1}: {freqs[k] / 1e6:.3f} MHz ===")
-        op = HelmholtzOperator(acq, k, sign_conv=-1, pml_alpha=10.0, pml_size=9.0e-3)
+        op = HelmholtzOperator(
+            acq,
+            k,
+            sign_conv=-1,
+            pml_alpha=10.0,
+            pml_size=9.0e-3,
+            use_gpu=use_gpu,
+            progress=progress,
+        )
         grad = HelmholtzAdjointGrad(
             op,
             deriv_fn=lambda m, o: 8
@@ -132,7 +143,7 @@ def main() -> None:
 
     # 5) Save to .mat
     savemat(
-        "Results/kWave_BreastCT_WaveformInversionResults.mat",
+        Path(SAVE_DIR / "kWave_BreastCT_WaveformInversionResults.mat"),
         {
             "xi": grid.xi,
             "yi": grid.yi,

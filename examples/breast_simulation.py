@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.io import loadmat
+from pathlib import Path
 
 from chirpy.geometry import ImageGrid2D, TransducerArray2D
 from chirpy.data import AcquisitionData
@@ -7,6 +8,7 @@ from chirpy.data.image_data import ImageData
 from chirpy.optimization.operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
 from chirpy.utils.paths import detect_root
+from chirpy.utils.progress import Progress, ProgressConfig
 
 """
 Breast phantom simulation (time domain).
@@ -21,9 +23,11 @@ Process:
 
 # --------------------------- Configuration --------------------------- #
 ROOT_DIR = detect_root()
-DATA_DIR = ROOT_DIR / "data"
-SAVE_DIR = ROOT_DIR / "outputs"
+DATA_DIR = Path(ROOT_DIR / "data")
+SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
+
+progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
 # Grid / physics
 Nx = Ny = 240
@@ -86,7 +90,7 @@ def main() -> None:
         pulse=pulse,
         c_ref=c_ref,
         use_gpu=use_gpu,
-        use_tqdm=use_tqdm,
+        progress=progress,
     )
 
     # 5) Simulate and save

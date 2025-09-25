@@ -176,25 +176,14 @@ class AcquisitionData(DataContainer):
         Save the entire AcquisitionData payload to an .npz file:
         - array
         - geometry: ImageGrid2D (xi, yi) and TransducerArray2D (positions, is_tx, is_rx)
-        - axes: time or freqs (exactly one)
+        - axes: time or freqs (only if present)
         - ctx: JSON-serialized dict (pickle-free)
-        - meta: a tiny dict including version, mode
-
-        Parameters
-        ----------
-        path : str | Path
-        compressed : bool
-            If True, use np.savez_compressed (smaller file, slightly slower).
-
-        Returns
-        -------
-        Path : final file path written.
+        - meta: tiny dict including version, mode
         """
         path = Path(path).with_suffix(".npz")
 
         payload = {
             "array": self.array,
-            # --- geometry ---
             "grid_xi": getattr(self.grid, "xi", None),
             "grid_yi": getattr(self.grid, "yi", None),
             "tx_positions": self.tx_array.positions
@@ -202,15 +191,21 @@ class AcquisitionData(DataContainer):
             else None,
             "is_tx": self.tx_array.is_tx if self.tx_array is not None else None,
             "is_rx": self.tx_array.is_rx if self.tx_array is not None else None,
-            # --- axes ---
-            "time": self.time if self.time is not None else None,
-            "freqs": self.freqs if self.freqs is not None else None,
-            # --- meta / ctx ---
             "meta": np.array({"version": "1.0", "mode": self.mode}, dtype=object),
+            # store ctx as plain unicode scalar (NumPy 2.0+: use np.str_)
             "ctx_json": np.array(
-                json.dumps(self.ctx, ensure_ascii=False), dtype=object
+                json.dumps(self.ctx, ensure_ascii=False), dtype=np.str_
             ),
         }
+
+        # Axes: only include when present; never store None
+        if self.time is not None:
+            payload["time"] = self.time
+        if self.freqs is not None:
+            payload["freqs"] = self.freqs
+
+        # Drop any None values so we never write object arrays
+        payload = {k: v for k, v in payload.items() if v is not None}
 
         saver = np.savez_compressed if compressed else np.savez
         saver(path, **payload)
@@ -234,8 +229,8 @@ class AcquisitionData(DataContainer):
         with np.load(path, allow_pickle=False) as z:
             array = z["array"] if "array" in z.files else None
 
-            xi = z["grid_x"] if "grid_x" in z.files else None
-            yi = z["grid_y"] if "grid_y" in z.files else None
+            xi = z["grid_xi"] if "grid_xi" in z.files else None
+            yi = z["grid_yi"] if "grid_yi" in z.files else None
             if xi is None or yi is None:
                 raise ValueError(
                     "Missing grid_xi / grid_yi in file; cannot reconstruct ImageGrid2D."
@@ -254,13 +249,33 @@ class AcquisitionData(DataContainer):
                 is_tx=is_tx.astype(bool),
                 is_rx=is_rx.astype(bool),
             )
-            try:
-                ctx = json.loads(z["ctx_json"].item()) if "ctx_json" in z.files else {}
-            except Exception:
+
+            # ctx_json was stored as unicode scalar
+            if "ctx_json" in z.files:
+                try:
+                    ctx = json.loads(str(z["ctx_json"]))
+                except Exception:
+                    ctx = {}
+            else:
                 ctx = {}
 
-            time = z["time"] if ("time" in z.files) else None
-            freqs = z["freqs"] if ("freqs" in z.files) else None
+            time = None
+            if "time" in z.files:
+                t = z["time"]
+                time = (
+                    None
+                    if getattr(t, "dtype", None) is not None and t.dtype.hasobject
+                    else t
+                )
+
+            freqs = None
+            if "freqs" in z.files:
+                f = z["freqs"]
+                freqs = (
+                    None
+                    if getattr(f, "dtype", None) is not None and f.dtype.hasobject
+                    else f
+                )
 
         # construct AcquisitionData
         return cls(

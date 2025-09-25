@@ -141,7 +141,9 @@ class NonlinearLS(Function):
 
         # cache for last misfit
         self._last_misfit: Optional[float] = None
-        grad_eval.set_residual_callback(self.cache_from_residual)
+
+        if hasattr(grad_eval, "set_residual_callback"):
+            grad_eval.set_residual_callback(self.cache_from_residual)
 
     # ------------------------- public API ------------------------------ #
     def set_sync_value(self, flag: bool) -> None:

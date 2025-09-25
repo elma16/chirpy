@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 from chirpy.geometry import TransducerArray2D, ImageGrid2D
 from chirpy.data import AcquisitionData, ImageData
@@ -11,12 +12,13 @@ from chirpy.optimization.algorithm.cg_time import CG_Time
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
 from chirpy.utils.paths import detect_root
+from chirpy.utils.progress import Progress, ProgressConfig
 
 """
 Two-circle time-domain inversion demo.
 
 Process:
-1) Build ImageGrid2D and a synthetic “true” c(x,y) with two circular inclusions.
+1) Build ImageGrid2D and a synthetic "true" c(x,y) with two circular inclusions.
 2) Construct a ring array and AcquisitionData; simulate d_obs (no encoding).
 3) Build inversion operator (with or without source encoding), define LS + adjoint gradient.
 4) Run optimization (GD or CG_Time) for N_ITER iterations from a homogeneous initial model.
@@ -25,8 +27,10 @@ Process:
 
 # --------------------------- Configuration --------------------------- #
 ROOT_DIR = detect_root()
-SAVE_DIR = ROOT_DIR / "outputs"
+SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
+
+progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
 # Grid / physics
 Nx = Ny = 128
@@ -81,7 +85,7 @@ def main() -> None:
         drop_self_rx=True,
         pulse=pulse,
         use_gpu=use_gpu,
-        use_tqdm=use_tqdm,
+        progress=progress,
     )
     acq_sim = op_true.simulate()
     obs_path = SAVE_DIR / f"acq_sim_ring_full_{n_tx}.npz"
@@ -105,7 +109,7 @@ def main() -> None:
         drop_self_rx=bool(DROP_SELF_RX and not USE_ENCODING),
         pulse=pulse,
         use_gpu=use_gpu,
-        use_tqdm=use_tqdm,
+        progress=progress,
     )
     grad = AdjointStateGrad(op_inv, K=(K if (USE_ENCODING and K > 1) else None), seed=0)
     f_ls = NonlinearLS(op_inv, grad_eval=grad, weight=1.0, normalize=NORMALIZE)
@@ -126,9 +130,10 @@ def main() -> None:
             max_bt=12,
             schedule_fn=lambda k, lr: lr,
             viz=viz,
+            progress=progress,
         )
     else:
-        solver = CG_Time(viz=viz)
+        solver = CG_Time(viz=viz, progress=progress)
 
     solver.solve(kind="c", fun=f_ls, m0=m0, n_iter=N_ITER)
     rec_path = SAVE_DIR / f"record_{'ENC' if USE_ENCODING else 'NOENC'}.npz"

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chirpy"
 description = "A Flexible Python Framework for Full-Wave Inversion in Ultrasound Tomography"
-version = "0.0.1"
+version = "0.0.2"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -37,5 +37,13 @@ ignore = ["E501"]
 #extend-include = ["*.ipynb"]
 
 [tool.pytest.ini_options]
-filterwarnings = "ignore"
-
+addopts = "-ra -q"
+markers = [
+  "slow: long-running integration tests",
+  "kwave: requires k-Wave binary available",
+  "gpu: requires CUDA/CuPy",
+]
+filterwarnings = [
+  "ignore::UserWarning",
+  "ignore::DeprecationWarning",
+]

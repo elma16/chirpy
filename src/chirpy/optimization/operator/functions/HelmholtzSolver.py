@@ -32,7 +32,19 @@ class HelmholtzSolver:
         i.e. col-major.
     """
 
-    def __init__(self, x, y, vel, atten, f, signConvention, a0, L_PML, canUseGPU=False):
+    def __init__(
+        self,
+        x,
+        y,
+        vel,
+        atten,
+        f,
+        signConvention,
+        a0,
+        L_PML,
+        canUseGPU=False,
+        progress_cb=None,
+    ):
         # Basic parameters
         self.x = x
         self.y = y
@@ -104,7 +116,7 @@ class HelmholtzSolver:
 
         # GPU block-LU path
         if self.canUseGPU:
-            self._compute_block_lu_gpu()
+            self._compute_block_lu_gpu(progress_cb=progress_cb)
 
     def _populate_sparse_matrix(self):
         """
@@ -241,7 +253,7 @@ class HelmholtzSolver:
         coo = coo_matrix((vals, (rows, cols)), shape=(Nx * Ny, Nx * Ny))
         self.HelmholtzEqn = coo.tocsc()
 
-    def _compute_block_lu_gpu(self):
+    def _compute_block_lu_gpu(self, progress_cb=None):
         """
         In col-major flatten: offset = y + Ny*x
         We want Nx blocks, each block is (Ny x Ny).
@@ -287,6 +299,12 @@ class HelmholtzSolver:
             self.Ul[:, j] = cp.asarray(U_block.diagonal(-1))
             self.Uu[:, j] = cp.asarray(U_block.diagonal(1))
 
+            if progress_cb is not None:
+                try:
+                    progress_cb(1)
+                except Exception:
+                    pass
+
         # last block j=Nx-1
         j = Nx - 1
         row_start = j * Ny
@@ -295,6 +313,12 @@ class HelmholtzSolver:
         Dd[:, j] = cp.asarray(D_block.diagonal())
         Dl[:, j] = cp.asarray(D_block.diagonal(-1))
         Du[:, j] = cp.asarray(D_block.diagonal(1))
+
+        if progress_cb is not None:
+            try:
+                progress_cb(1)
+            except Exception:
+                pass
 
         self.invT = decompBlockLU_gpu(
             self.Ld, self.Ll, self.Lu, Dd, Dl, Du, self.Ud, self.Ul, self.Uu

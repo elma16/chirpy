@@ -6,6 +6,8 @@ from chirpy.data.image_data import ImageData
 from chirpy.optimization.function.least_squares import NonlinearLS
 from chirpy.optimization.algorithm.base import Optimizer
 from chirpy.utils.visualizer_multi_mode import Visualizer
+from chirpy.utils.progress import Progress, ProgressConfig
+
 
 # ---------------- Constants ---------------- #
 _VEL_MIN, _VEL_MAX = 800.0, 2500.0
@@ -15,8 +17,8 @@ _ALPHA_FALLBACK = 10.0  # fallback initial step
 
 class CG_Time(Optimizer):
     """
-    Minimal non-linear Conjugate Gradient optimizer with Polak–Ribière direction,
-    Barzilai–Borwein (BB-1/BB-2) step initialization, and Armijo backtracking.
+    Minimal non-linear Conjugate Gradient optimizer with Polak-Ribière direction,
+    Barzilai-Borwein (BB-1/BB-2) step initialization, and Armijo backtracking.
 
     This optimizer supports two parameter "kinds":
     - 'c'     : sound speed (velocity), clipped to [_VEL_MIN, _VEL_MAX]
@@ -46,6 +48,7 @@ class CG_Time(Optimizer):
         shrink: float = 0.5,
         max_ls: int = 10,
         viz: Optional[Visualizer] = None,
+        progress: Progress | None = None,
     ):
         """
         Parameters
@@ -86,6 +89,8 @@ class CG_Time(Optimizer):
 
         # visualizer
         self._viz = viz
+
+        self._progress = progress or Progress(ProgressConfig(enabled=False))
 
     @staticmethod
     def _stat(arr: np.ndarray) -> str:
@@ -329,10 +334,28 @@ class CG_Time(Optimizer):
         print(
             f"CG_Time (PR+BB1/BB-2 + Armijo)  iter={n_iter}  kind={kind}\n misfit={misfit0:.3e}"
         )
-        for k in range(1, n_iter + 1):
+        it = self._progress.iter(
+            range(1, n_iter + 1),
+            total=n_iter,
+            desc=f"CG_Time[{kind}]",
+            unit="iter",
+        )
+        for k in it:
             if verbose:
                 print(f"==== Iter {k}/{n_iter} ====")
             g = self._step(g, m0, fun, kind=kind, verb=verbose)
+
+            # Optional progress postfix (only active if backend supports it)
+            if hasattr(it, "set_postfix"):
+                try:
+                    it.set_postfix(
+                        {
+                            "Φ": f"{float(fun.last_misfit):.3e}",
+                            "α": f"{float(self._last_alpha):.2e}",
+                        }
+                    )
+                except Exception:
+                    pass
         return m0
 
     def get_record(self):

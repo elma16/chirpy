@@ -7,9 +7,9 @@ Single-frequency operator that wraps an internal
 
 External code should **only** interact with the wave solver via the following interfaces:
 
-* ``forward(m)`` – Produces simulated complex Tx×Rx data F(m)
-* ``solve(src, adjoint=False)`` – Solves forward or adjoint wave equation for arbitrary source
-* ``get_field(key)`` – Read-only access to cache:
+* ``forward(m)`` - Produces simulated complex Tx x Rx data F(m)
+* ``solve(src, adjoint=False)`` - Solves forward or adjoint wave equation for arbitrary source
+* ``get_field(key)`` - Read-only access to cache:
   ``WF`` ``VSRC`` ``scaling`` ``obs_data``
   ``PML`` ``V`` ``freq``
 
@@ -26,6 +26,7 @@ from chirpy.optimization.operator.base import Operator
 from chirpy.optimization.operator.functions.HelmholtzSolver import (
     HelmholtzSolver,
 )  # internal only
+from chirpy.utils.progress import Progress, ProgressConfig
 
 
 class HelmholtzOperator(Operator):
@@ -41,6 +42,7 @@ class HelmholtzOperator(Operator):
         pml_alpha: float,
         pml_size: float,
         use_gpu: bool = False,
+        progress: Progress | None = None,
     ):
         self._freq = float(data.freqs[f_idx])
         self._sign = int(sign_conv)
@@ -67,6 +69,7 @@ class HelmholtzOperator(Operator):
         self._atten_phase = False  # imag-stage flag, set by CG_Time
 
         self.canUseGPU = use_gpu
+        self._progress = progress or Progress(ProgressConfig(enabled=False))
 
     # ------------------------------------------------------------------ #
     # public helpers
@@ -125,8 +128,14 @@ class HelmholtzOperator(Operator):
         """
         if self._cache is None:
             raise RuntimeError("forward() must be called first")
-        ADJ_WF, VSRC = self._solve(src, adjoint=True)
-        # cache for inspection/diagnostics if desired
+
+        with self._progress.task(
+            total=1, desc="Helmholtz adjoint", unit="solve"
+        ) as upd:
+            ADJ_WF, VSRC = self._solve(src, adjoint=True)
+            upd(1)
+
+        # cache for diagnostics if desired
         self._cache.ADJ_WF = ADJ_WF  # type: ignore[attr-defined]
         return ADJ_WF, VSRC
 
@@ -136,22 +145,47 @@ class HelmholtzOperator(Operator):
     def _build_cache(self, m: np.ndarray) -> None:
         vel = 1.0 / np.real(m)
         atten = np.sign(self._sign) * np.imag(m) * 2 * np.pi
-        HS = HelmholtzSolver(
-            self._xi,
-            self._yi,
-            vel,
-            atten,
-            self._freq,
-            self._sign,
-            self._a0,
-            self._L_PML,
-            canUseGPU=self.canUseGPU,
-        )
+
+        # Construct solver; on GPU expose block-LU column progress via callback
+        if self.canUseGPU:
+            # one tick per x-column (Nx); HelmholtzSolver will call the callback
+            with self._progress.task(total=self.nx, desc="Block-LU", unit="col") as upd:
+                HS = HelmholtzSolver(
+                    self._xi,
+                    self._yi,
+                    vel,
+                    atten,
+                    self._freq,
+                    self._sign,
+                    self._a0,
+                    self._L_PML,
+                    canUseGPU=True,
+                    progress_cb=upd,  # forwarded into _compute_block_lu_gpu
+                )
+        else:
+            HS = HelmholtzSolver(
+                self._xi,
+                self._yi,
+                vel,
+                atten,
+                self._freq,
+                self._sign,
+                self._a0,
+                self._L_PML,
+                canUseGPU=False,
+                progress_cb=None,
+            )
 
         SRC = np.zeros((self.ny, self.nx, self.n_tx), np.complex128)
         for s, (ix, iy) in enumerate(zip(self._x_idx, self._y_idx)):
             SRC[iy, ix, s] = 1.0
-        WF, VSRC = HS.solve(SRC, adjoint=False)
+
+        # Forward solve progress (coarse)
+        with self._progress.task(
+            total=1, desc="Helmholtz forward", unit="solve"
+        ) as upd:
+            WF, VSRC = HS.solve(SRC, adjoint=False)
+            upd(1)
 
         self._cache = SimpleNamespace(
             model=m.copy(),

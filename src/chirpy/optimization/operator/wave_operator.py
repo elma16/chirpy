@@ -7,11 +7,11 @@ import time
 from types import SimpleNamespace
 from typing import Dict, Optional, Tuple
 import numpy as np
-from tqdm import tqdm
-
+from pathlib import Path
 from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.base import Operator
 from chirpy.signals import Pulse, GaussianModulatedPulse
+from chirpy.utils.progress import Progress, ProgressConfig
 
 from kwave.kgrid import kWaveGrid
 from kwave.kmedium import kWaveMedium
@@ -22,12 +22,6 @@ from kwave.options.simulation_options import SimulationOptions
 from kwave.options.simulation_execution_options import (
     SimulationExecutionOptions,
 )
-
-
-# no-op callable (for zero-branch hot loops)
-def _noop(*_, **__):
-    return None
-
 
 # =========================================================================
 #   main operator
@@ -63,7 +57,7 @@ class WaveOperator(Operator):
     use_encoding : bool, optional
         If True, uses a single encoded shot per forward/adjoint (Tx dimension=1).
     drop_self_rx : bool, optional
-        If True in non-encoding mode, exclude the transmitter’s own receiver
+        If True in non-encoding mode, exclude the transmitter's own receiver
         location when forming the sensor mask. Ignored when `use_encoding=True`.
     record_full_wf : bool, optional
         If True, also record the full pressure field over the domain for every
@@ -89,12 +83,10 @@ class WaveOperator(Operator):
         Choose GPU (`kspace_first_order_2d_gpu`) or CPU (`kspaceFirstOrder2DC`) solver.
     verbose : bool, optional
         If True, let k-Wave print; otherwise suppress k-Wave stdout/stderr.
-    use_tqdm : bool, optional
-        If True, show tqdm progress bars for sequential shots.
-    shot_logs : bool, optional
-        If True, print per-shot lines (e.g., "42/64 ..."). If False, suppress
-        those lines to avoid interleaving with tqdm. Default False.
-
+    progress: Progress | None = None,
+        Adds progress logs.
+    binary_path: Path = None,
+        Binary path for k-Wave.
     Attributes
     ----------
     img_grid : ImageGrid2D
@@ -155,8 +147,8 @@ class WaveOperator(Operator):
         pml_inside: bool = False,
         use_gpu: bool = False,
         verbose: bool = False,
-        use_tqdm: bool = False,
-        shot_logs: bool = False,
+        progress: Progress | None = None,
+        binary_path: Path = None,
     ):
         super().__init__()
 
@@ -212,7 +204,9 @@ class WaveOperator(Operator):
 
         self._k_solver = kspace_first_order_2d_gpu if use_gpu else kspaceFirstOrder2DC
 
-        self.exec_opts = SimulationExecutionOptions(is_gpu_simulation=use_gpu)
+        self.exec_opts = SimulationExecutionOptions(
+            is_gpu_simulation=use_gpu, binary_path=binary_path
+        )
 
         # ---------- 5. geometry --------------------------------------
         self.tx_pos = tx_array.tx_positions.astype(float)
@@ -339,18 +333,7 @@ class WaveOperator(Operator):
         )
 
         self.verbose = verbose
-        self.use_tqdm = use_tqdm
-        self.shot_logs = bool(shot_logs)
-
-        # -------- per-shot logging setup (zero-branch in loops) ------
-        width = len(str(self.n_tx or 1))
-        self._fwd_line_fmt = (
-            f"[TDO-FWD] {{i:0{width}d}}/{{n}} | tx=({{x:+.3f}},{{y:+.3f}})m | "
-            f"nt={{nt}}, rx={{rx}} |  done in {{t:.2f}}s"
-        )
-        self._adj_line_fmt = f"[TDO-ADJ] {{i:0{width}d}}/{{n}} | nt={{nt}}, rx={{rx}} | done in {{t:.2f}}s"
-        self._per_shot_log_fwd = self._log_shot_fwd if self.shot_logs else _noop
-        self._per_shot_log_adj = self._log_shot_adj if self.shot_logs else _noop
+        self._progress = progress or Progress(ProgressConfig(enabled=False))
 
     # ================================================================
     # helpers
@@ -469,30 +452,6 @@ class WaveOperator(Operator):
         return self.n_rx_full
 
     # ================================================================
-    # low-level logging helpers (bound to no-op when shot_logs=False)
-    # ================================================================
-    def _log_shot_fwd(
-        self, i: int, x: float, y: float, t_i: float, nrx: int, tx_iterator
-    ):
-        if self.use_tqdm and hasattr(tx_iterator, "set_postfix"):
-            # Only add postfix when shot_logs=True to keep bar clean otherwise
-            tx_iterator.set_postfix(
-                {"tx": f"({x:+.3f},{y:+.3f})", "rx": nrx, "t": f"{t_i:.2f}s"}
-            )
-        elif not self.use_tqdm:
-            print(
-                self._fwd_line_fmt.format(
-                    i=i + 1, n=self.n_tx, x=x, y=y, nt=self.nt, rx=nrx, t=t_i
-                )
-            )
-
-    def _log_shot_adj(self, tx: int, t_i: float, nrx: int, N: int, tx_iterator):
-        if self.use_tqdm and hasattr(tx_iterator, "set_postfix"):
-            tx_iterator.set_postfix({"rx": nrx, "t": f"{t_i:.2f}s"})
-        elif not self.use_tqdm:
-            print(self._adj_line_fmt.format(i=tx + 1, n=N, nt=self.nt, rx=nrx, t=t_i))
-
-    # ================================================================
     # k-Wave low-level wrapper
     # ================================================================
     def _run_sim(
@@ -597,31 +556,36 @@ class WaveOperator(Operator):
 
         # ---------- encoded -----------------------------------------
         if self.use_encoding:
-            t0 = time.time()
+            with self._progress.task(total=1, desc="Forward(enc)", unit="run") as upd:
+                t0 = time.time()
 
-            p_mat = np.zeros((self.src_mask.sum(), self.nt), np.float32)
-            for w, d, (x, y) in zip(self.enc_weights, self.enc_delays, self.tx_pos.T):
-                ix, iy = self._xy2idx((x, y))
-                row = self._row_map[iy + ix * self.ny]
-                end = d + self.pulse.shape[1]
-                if end > self.nt:
-                    end = self.nt
-                seg_len = end - d
-                if seg_len > 0:
-                    p_mat[row, d:end] = w * self.pulse[0, :seg_len] / self._src_scale
+                p_mat = np.zeros((self.src_mask.sum(), self.nt), np.float32)
+                for w, d, (x, y) in zip(
+                    self.enc_weights, self.enc_delays, self.tx_pos.T
+                ):
+                    ix, iy = self._xy2idx((x, y))
+                    row = self._row_map[iy + ix * self.ny]
+                    end = d + self.pulse.shape[1]
+                    if end > self.nt:
+                        end = self.nt
+                    seg_len = end - d
+                    if seg_len > 0:
+                        p_mat[row, d:end] = (
+                            w * self.pulse[0, :seg_len] / self._src_scale
+                        )
 
-            wf, rec_kw = self._run_sim(self.src_mask, p_mat, full_wf=full)
-            if wf is not None:
-                WF_list.append(wf)
-            REC_list.append(rec_kw[None])
-
+                wf, rec_kw = self._run_sim(self.src_mask, p_mat, full_wf=full)
+                if wf is not None:
+                    WF_list.append(wf)
+                REC_list.append(rec_kw[None])
+                upd(1)
             elapsed = time.time() - t0
             dmin = int(np.min(self.enc_delays)) if self.enc_delays is not None else 0
             dmax = int(np.max(self.enc_delays)) if self.enc_delays is not None else 0
 
             nrx = self._n_rx_print()
             print(
-                f"[TDO-FWD] enc | nt={self.nt}, rx={nrx}, delays={dmin * self.dt * 1e6:.1f}–{dmax * self.dt * 1e6:.1f} µs | done in {elapsed:.2f}s"
+                f"[TDO-FWD] enc | nt={self.nt}, rx={nrx}, delays={dmin * self.dt * 1e6:.1f}-{dmax * self.dt * 1e6:.1f} µs | done in {elapsed:.2f}s"
             )
 
         # ---------- sequential --------------------------------------
@@ -630,17 +594,12 @@ class WaveOperator(Operator):
             t_sum = 0.0
             t_all_start = time.time()
 
-            if self.use_tqdm:
-                tx_iterator = tqdm(
-                    enumerate(self.tx_pos.T),
-                    total=self.n_tx,
-                    desc="Forward simulation",
-                    unit="shot",
-                    ncols=100,
-                    disable=not self.use_tqdm,
-                )
-            else:
-                tx_iterator = enumerate(self.tx_pos.T)
+            tx_iterator = self._progress.iter(
+                enumerate(self.tx_pos.T),
+                total=self.n_tx,
+                desc="Forward",
+                unit="shot",
+            )
 
             for i, (x, y) in tx_iterator:
                 start_i = time.time()
@@ -668,10 +627,6 @@ class WaveOperator(Operator):
 
                 t_i = time.time() - start_i
                 t_sum += t_i
-
-                nrx = self._n_rx_print(i)
-                # one call; bound to real logger or no-op
-                self._per_shot_log_fwd(i, x, y, t_i, nrx, tx_iterator)
 
             total = time.time() - t_all_start
             mean_shot = t_sum / self.n_tx if self.n_tx > 0 else 0.0
@@ -709,15 +664,16 @@ class WaveOperator(Operator):
         residual_kw = residual[:, self.idx_kw2elem, :].astype(np.float32, copy=False)
 
         if self.use_encoding:
-            t0 = time.time()
-            q_rev = residual_kw[0][:, ::-1]  # (n_rx_full, nt)
+            with self._progress.task(total=1, desc="Forward(enc)", unit="run") as upd:
+                t0 = time.time()
+                q_rev = residual_kw[0][:, ::-1]  # (n_rx_full, nt)
 
-            q_rev = np.cumsum(q_rev, axis=1) * self.dt
-            p_src = q_rev / self._src_scale
+                q_rev = np.cumsum(q_rev, axis=1) * self.dt
+                p_src = q_rev / self._src_scale
 
-            wf, _ = self._run_sim(self.rx_mask, p_src, full_wf=True)
-            lam += wf[::-1]
-
+                wf, _ = self._run_sim(self.rx_mask, p_src, full_wf=True)
+                lam += wf[::-1]
+                upd(1)
             elapsed = time.time() - t0
             nrx = self._n_rx_print()
             print(f"[TDO-ADJ] enc | nt={self.nt}, rx={nrx} | done in {elapsed:.2f}s")
@@ -726,16 +682,12 @@ class WaveOperator(Operator):
             t_sum = 0.0
             t_all_start = time.time()
 
-            if self.use_tqdm:
-                tx_iterator = tqdm(
-                    range(N),
-                    desc="Adjoint simulation",
-                    unit="shot",
-                    ncols=100,
-                    disable=not self.use_tqdm,
-                )
-            else:
-                tx_iterator = range(N)
+            tx_iterator = self._progress.iter(
+                range(N),
+                total=N,
+                desc="Adjoint",
+                unit="shot",
+            )
 
             for tx in tx_iterator:
                 start_i = time.time()
@@ -764,10 +716,6 @@ class WaveOperator(Operator):
 
                 t_i = time.time() - start_i
                 t_sum += t_i
-
-                nrx = self._n_rx_print(tx)
-                # one call; bound to real logger or no-op
-                self._per_shot_log_adj(tx, t_i, nrx, N, tx_iterator)
 
             total = time.time() - t_all_start
             mean_shot = t_sum / N if N > 0 else 0.0
@@ -804,8 +752,6 @@ class WaveOperator(Operator):
             )
             raise IndexError(f"tx_idx out of range [0, {self.n_tx})")
 
-        start = time.time()
-
         lam = np.zeros((self.nt, self.ny, self.nx), np.float32)
 
         residual_kw = residual_tx[self.idx_kw2elem].astype(np.float32, copy=False)
@@ -828,13 +774,6 @@ class WaveOperator(Operator):
         lam += wf[::-1]
         lam = lam.astype(np.float64)
 
-        end = time.time()
-
-        nrx = self._n_rx_print(tx_idx)
-        if self.shot_logs:
-            print(
-                f"[TDO-ADJ] one_tx | tx={tx_idx + 1}/{self.n_tx} | nt={self.nt}, rx={nrx} | done in {end - start:.2f}s"
-            )
         return lam
 
     # ================================================================
