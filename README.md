@@ -34,7 +34,7 @@ Users should also be aware of [some data made available by Wei](https://github.c
 For frequency domain simulations with GPU acceleration (requires CUDA):
 
 ```bash
-pip install .[gpu]
+pip install ".[gpu]"
 ```
 
 **Note**: Check the [CuPy installation guide](https://docs.cupy.dev/en/stable/install.html) to verify hardware compatibility before installing GPU dependencies.
@@ -42,9 +42,27 @@ pip install .[gpu]
 ### Development Installation
 
 ```bash
-pip install .[dev]
+pip install ".[dev]"
 pre-commit install
 ```
+
+> **⚠️ macOS Users — Important Note on Absorption Support**
+>
+> At present, **absorption support in `k-Wave-python` is broken on macOS** due to [issues](https://github.com/waltsims/k-wave-python/issues/470) in the OpenMP backend used by the default build.  
+>
+> If you are running Chirpy on a Mac and require absorption modeling, you must additionally build and use the fixed C++ backend from the fork below:
+>
+> ```bash
+> git clone https://github.com/elma16/k-wave-omp-darwin.git
+> cd k-wave-omp-darwin
+> make clean
+> make -j"$(sysctl -n hw.logicalcpu)"
+> ```
+>
+> Once built, point Chirpy’s `WaveOperator` to your compiled `kspaceFirstOrder-OMP` binary from this repository.  
+>
+> For more details, see: [elma16/k-wave-omp-darwin](https://github.com/elma16/k-wave-omp-darwin).
+
 
 ## References
 

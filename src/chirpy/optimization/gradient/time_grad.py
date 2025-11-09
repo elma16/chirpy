@@ -342,7 +342,7 @@ class AdjointStateGrad(GradientEvaluator):
             op.forward(m, kind=kind)
 
         # sensitivity kernel K
-        c_cur = op.model_c  # 声速用于灵敏度核
+        c_cur = op.model_c
         if kind == "c":
             K = self._kc(c_cur, op)  # shape (ny, nx), float64
         else:

@@ -26,6 +26,7 @@ ROOT_DIR = detect_root()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
+KWAVE_DIR = Path("/Users/elliottmacneil/cpp/k-wave-omp-darwin/kspaceFirstOrder-OMP")
 
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
