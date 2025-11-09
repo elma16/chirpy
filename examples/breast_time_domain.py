@@ -30,6 +30,7 @@ ROOT_DIR = detect_root()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
+KWAVE_DIR = None
 
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
@@ -100,6 +101,7 @@ def main() -> None:
         c_ref=c_ref,
         use_gpu=use_gpu,
         progress=progress,
+        binary_path=KWAVE_DIR,
     )
     grad = AdjointStateGrad(op, K=(K if (USE_ENCODING and K > 1) else None), seed=0)
     f_ls = NonlinearLS(op, grad_eval=grad, normalize=NORMALIZE)

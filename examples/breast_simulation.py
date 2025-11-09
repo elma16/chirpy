@@ -26,7 +26,8 @@ ROOT_DIR = detect_root()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
-KWAVE_DIR = Path("/Users/elliottmacneil/cpp/k-wave-omp-darwin/kspaceFirstOrder-OMP")
+
+KWAVE_DIR = None
 
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
@@ -40,7 +41,7 @@ use_tqdm = True
 
 # Acquisition
 n_tx = 512
-radius = 110e-3  # 110 mm
+radius = 110e-3
 
 
 # --------------------------- Utilities --------------------------- #
@@ -92,6 +93,7 @@ def main() -> None:
         c_ref=c_ref,
         use_gpu=use_gpu,
         progress=progress,
+        binary_path=KWAVE_DIR,
     )
 
     # 5) Simulate and save
