@@ -26,7 +26,6 @@ ROOT_DIR = detect_root()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
-
 KWAVE_DIR = None
 
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
@@ -35,6 +34,7 @@ progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 Nx = Ny = 240
 dx = dy = 1.0e-3
 c0_ref = 1500.0
+
 f0 = 0.3e6
 use_gpu = False
 use_tqdm = True

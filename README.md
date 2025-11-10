@@ -64,6 +64,25 @@ pre-commit install
 > For more details, see: [elma16/k-wave-omp-darwin](https://github.com/elma16/k-wave-omp-darwin).
 
 
+### Run examples in Google Colab
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_simulation_nb.ipynb
+) — **Breast: Simulation (time-domain)**
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_time_domain_nb.ipynb
+) — **Breast: Inversion (time-domain)**
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_frequency_domain_nb.ipynb
+) — **Breast: Inversion (frequency-domain, Helmholtz)**
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/circle_model_tq.ipynb
+) — **Two-circle TD inversion (toy)**
+
+
 ## References
 
 **[1]** Ali, R., Mitcham, T. M., Brevett, T., Agudo, Ò. C., Martinez, C. D., Li, C., Doyley, M. M., & Duric, N. (2024). 2-D Slicewise Waveform Inversion of Sound Speed and Acoustic Attenuation for Ring Array Ultrasound Tomography Based on a Block LU Solver. *IEEE Transactions on Medical Imaging*, 1-1. https://doi.org/10.1109/TMI.2024.3383816
