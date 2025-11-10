@@ -14,6 +14,9 @@ from types import SimpleNamespace
 from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.base import Operator
 from chirpy.utils.progress import Progress, ProgressConfig
+from chirpy.optimization.operator.functions.HelmholtzSolver_optimized import (
+    HelmholtzSolver_Optimized,
+)
 
 try:
     import cupy as cp
@@ -136,8 +139,6 @@ class HelmholtzOperator_Optimized(Operator):
 
         # Import and instantiate optimized solver
         if self._solver_class is None:
-            from HelmholtzSolver_optimized import HelmholtzSolver_Optimized
-
             self._solver_class = HelmholtzSolver_Optimized
 
         # Construct solver with progress callback
@@ -236,8 +237,6 @@ class HelmholtzOperator_Optimized(Operator):
 
         # Import optimized solver
         if self._solver_class is None:
-            from HelmholtzSolver_optimized import HelmholtzSolver_Optimized
-
             self._solver_class = HelmholtzSolver_Optimized
 
         if self.canUseGPU:
