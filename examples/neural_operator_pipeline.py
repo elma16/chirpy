@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-"""
-Chirpy-based refactor of Leili's work, with tqdm progress bars.
-
-Outputs (unchanged):
-- outputs/d_obs_180x180_1mm_0p3MHz_new_368.npz
-- outputs/incident_fields/incident_fields_freq_XX_f_YYY.npy
-- outputs/scattered_fields/scattered_fields_freq_XX_f_YYY.npy
-- outputs/kWave_BreastCT_WaveformInversionResults.mat
-- outputs/neural_operator_data/neural_operator_training_data.npz
-
-Note on memory: PACK_TENSORS=True builds large 4D tensors; set False to skip.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -44,15 +30,26 @@ from chirpy.optimization.gradient.adjoint_helmholtz import HelmholtzAdjointGrad
 
 from scipy.io import savemat
 
+"""
+Chirpy-based refactor of Leili's work, with tqdm progress bars.
+
+Outputs (unchanged):
+- outputs/d_obs_180x180_1mm_0p3MHz_new_368.npz
+- outputs/incident_fields/incident_fields_freq_XX_f_YYY.npy
+- outputs/scattered_fields/scattered_fields_freq_XX_f_YYY.npy
+- outputs/kWave_BreastCT_WaveformInversionResults.mat
+- outputs/neural_operator_data/neural_operator_training_data.npz
+
+Note on memory: PACK_TENSORS=True builds large 4D tensors; set False to skip.
+"""
+
 # -------------------- Configuration (kept consistent with your script) --------------------
 SAVE_DIR = Path("outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
 
 # Phantom source
 KWAVE_DIR = None
-DAT_PATH = Path(
-    "/Users/elliottmacneil/python/msgb/data/NumericalBreastPhantoms-selected/Neg_07_Left/MergedPhantom.DAT"
-)
+DAT_PATH = Path("NumericalBreastPhantoms-selected/Neg_07_Left/MergedPhantom.DAT")
 NX, NY, NZ = 616, 485, 719  # raw 3D (x,y,z) used to extract a single x-slice
 SLICE_AXIS_X_INDEX = NX // 2  # take the middle X-plane
 
@@ -96,7 +93,7 @@ OUTLIER_THRESH = 0.99
 
 # Neural operator packaging
 PACK_TENSORS = True
-USE_GPU = False
+use_gpu = False
 
 # Filenames
 OBS_NAME = SAVE_DIR / f"d_obs_{PAD_TO}x{PAD_TO}_{int(DX*1e3)}mm_0p3MHz_new_{N_TX}.npz"
@@ -209,7 +206,7 @@ def main() -> None:
             drop_self_rx=DROP_SELF_RX_SIM,
             pulse=pulse,
             c_ref=c_ref,
-            use_gpu=USE_GPU,
+            use_gpu=use_gpu,
             binary_path=KWAVE_DIR,
         )
         acq_sim = op_true.simulate()
@@ -268,7 +265,12 @@ def main() -> None:
         freq_bar.set_postfix_str(f"f={f_mhz:.3f} MHz")
 
         op = HelmholtzOperator(
-            acq_fd, k, sign_conv=-1, pml_alpha=10.0, pml_size=9.0e-3, use_gpu=False
+            acq_fd,
+            k,
+            sign_conv=-1,
+            pml_alpha=10.0,
+            pml_size=9.0e-3,
+            use_gpu=use_gpu,
         )
         grad = HelmholtzAdjointGrad(
             op,

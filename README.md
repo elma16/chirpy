@@ -67,20 +67,26 @@ pre-commit install
 ### Run examples in Google Colab
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
-  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_simulation_nb.ipynb
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/circle_model_td.ipynb
+) — **Two-circle TD inversion (toy)**
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_simulation.ipynb
 ) — **Breast: Simulation (time-domain)**
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
-  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_time_domain_nb.ipynb
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_time_domain.ipynb
 ) — **Breast: Inversion (time-domain)**
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
-  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_frequency_domain_nb.ipynb
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/breast_frequency_domain.ipynb
 ) — **Breast: Inversion (frequency-domain, Helmholtz)**
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](
-  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/circle_model_tq.ipynb
-) — **Two-circle TD inversion (toy)**
+  https://colab.research.google.com/github/elma16/chirpy/blob/main/examples/neural_operator_pipeline.ipynb
+) — **Neural Operator Data Gen Pipeline**
+
+
 
 
 ## References
