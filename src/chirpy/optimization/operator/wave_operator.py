@@ -205,9 +205,7 @@ class WaveOperator(Operator):
         self._k_solver = kspace_first_order_2d_gpu if use_gpu else kspaceFirstOrder2DC
 
         self.exec_opts = SimulationExecutionOptions(
-            is_gpu_simulation=use_gpu,
-            binary_path=binary_path,
-            show_sim_log=True,
+            is_gpu_simulation=use_gpu, binary_path=binary_path
         )
 
         # ---------- 5. geometry --------------------------------------
