@@ -129,10 +129,10 @@ class WaveOperator(Operator):
     # ------------------------------------------------------------------
     def __init__(
             self,
-            data: AcquisitionData,
-            medium_params: dict,
+            medium_params: dict ,
             record_time: float,
             *,
+            data: AcquisitionData | None = None,
             geom_config: GeometryConfigurator | None = None,
             tau_max: float = 0.0,
             use_encoding: bool = False,
