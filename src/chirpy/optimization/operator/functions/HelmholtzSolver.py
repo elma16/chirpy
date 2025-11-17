@@ -4,8 +4,8 @@ from scipy.sparse import coo_matrix
 
 try:
     import cupy as cp
-    from .decompBlockLU import decompBlockLU as decompBlockLU
-    from .applyBlockLU import applyBlockLU as applyBlockLU
+    from .decompBlockLU import decompBlockLU
+    from .applyBlockLU import applyBlockLU
 
     _GPU_AVAILABLE = True
 except ImportError:
