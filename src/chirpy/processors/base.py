@@ -1,5 +1,5 @@
 """
-UFWI.processors.base
+chirpy.processors.base
 ===========================
 
 Contains the abstract base class from which every processors must inherit.

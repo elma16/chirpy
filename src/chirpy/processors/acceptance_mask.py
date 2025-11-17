@@ -1,5 +1,5 @@
 """
-UFWI.processors.acceptance_mask
+chirpy.processors.acceptance_mask
 ======================================
 
 Create and store a boolean acceptance mask excluding receivers that violate a

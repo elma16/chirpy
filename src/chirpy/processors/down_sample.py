@@ -1,5 +1,5 @@
 """
-UFWI.processors.downsample
+chirpy.processors.downsample
 =================================
 
 Select every *k-th* transmitter to reduce computational load.

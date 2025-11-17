@@ -1,5 +1,5 @@
 """
-UFWI.processors.phase_screen
+chirpy.processors.phase_screen
 ===================================
 
 `PhaseScreenCorrection` multiplies the acquisition tensor (Tx, Rx, F) by a

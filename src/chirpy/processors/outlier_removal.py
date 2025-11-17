@@ -1,9 +1,9 @@
 """
-UFWI.processors.outlier_removal
+chirpy.processors.outlier_removal
 ======================================
 
 Zeroes the largest magnitude samples in each (Tx,Rx) slice, restricted to the
-*acceptance mask* produced by :class:`~UFWI.processors.acceptance_mask.AcceptanceMask`.
+*acceptance mask* produced by :class:`~chirpy.processors.acceptance_mask.AcceptanceMask`.
 """
 
 from __future__ import annotations

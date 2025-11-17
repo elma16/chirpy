@@ -1,11 +1,11 @@
 """
-UFWI.processors.lowpass
+chirpy.processors.lowpass
 ==============================
 
-A zero-phase Tukey-window low-pass filter implemented as a preprocessing
-operator. It can
-  1) filter AcquisitionData **in place**, and
-  2) wrap a Pulse to produce a *filtered* Pulse lazily.
+A zero-phase Tukey-window low-pass filter implemented as a preprocessing operator. It can
+
+1) filter AcquisitionData **in place**, and
+2) wrap a Pulse to produce a *filtered* Pulse lazily.
 
 Examples
 --------

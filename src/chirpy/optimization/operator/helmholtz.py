@@ -1,5 +1,5 @@
 """
-UFWI.optimization.operator.helmholtz
+chirpy.optimization.operator.helmholtz
 ==========================================
 
 Single-frequency operator that wraps an internal
