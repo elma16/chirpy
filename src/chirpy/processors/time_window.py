@@ -1,5 +1,5 @@
 """
-UFWI.processors.time_window
+chirpy.processors.time_window
 ==================================
 
 Apply a "Gaussian-shaped" taper to each time trace to suppress

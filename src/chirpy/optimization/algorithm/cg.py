@@ -1,5 +1,5 @@
 """
-UFWI.optimization.algorithm.cg
+chirpy.optimization.algorithm.cg
 ====================================
 
 Non-linear Conjugate Gradient (CG_Time) optimizer for Helmholtz full-waveform inversion (FWI).

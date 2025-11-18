@@ -1,3 +1,8 @@
+"""
+Select every *k-th* transmitter to reduce computational load.
+This processor will modify the AcquisitionData array.
+"""
+
 from __future__ import annotations
 
 import numpy as np
