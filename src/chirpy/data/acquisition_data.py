@@ -40,15 +40,15 @@ class AcquisitionData(DataContainer):
 
     # ------------------------------------------------------------------
     def __init__(
-        self,
-        array,
-        *,
-        tx_array,
-        grid,
-        time: np.ndarray | None = None,
-        freqs: np.ndarray | None = None,
-        c0: float = 1500.0,  # sound speed
-        **ctx,
+            self,
+            array,
+            *,
+            tx_array: TransducerArray2D | None = None,
+            grid: ImageGrid2D | None = None,
+            time: np.ndarray | None = None,
+            freqs: np.ndarray | None = None,
+            c0: float = 1500.0,  # sound speed
+            **ctx,
     ):
         if array is not None and (time is None and freqs is None):
             raise ValueError("Specify at least one of 'time' or 'freqs'")
@@ -140,7 +140,7 @@ class AcquisitionData(DataContainer):
         This does not validate or synchronize the lengths of `time`/`freqs`. Call
         `set_time` or `set_freqs` if needed to ensure consistency.
         """
-        self.array = np.asarray(array, copy=False)
+        self.array = np.asarray(array)
 
     # ------------------------------------------------------------------
     # helper
@@ -411,7 +411,7 @@ class AcquisitionData(DataContainer):
         )
 
     def show_trace(
-        self, tx: int, rx: int, *, xunit="s", ax=None, figure_size=None, **line_kw
+            self, tx: int, rx: int, *, xunit="s", ax=None, figure_size=None, **line_kw
     ):
         """
         Plot a single Tx–Rx waveform (time domain).
@@ -470,7 +470,7 @@ class AcquisitionData(DataContainer):
         return ax
 
     def show_traces(
-        self, tx: int, rx_list=None, *, norm=False, ax=None, figure_size=None, **plot_kw
+            self, tx: int, rx_list=None, *, norm=False, ax=None, figure_size=None, **plot_kw
     ):
         """
         Overlay multiple Rx waveforms for a given Tx (time domain).
@@ -525,14 +525,14 @@ class AcquisitionData(DataContainer):
         return ax
 
     def show_sinogram(
-        self,
-        *,
-        t_idx=None,
-        t_val=None,
-        mode="max",
-        ax=None,
-        figure_size=None,
-        **imshow_kw,
+            self,
+            *,
+            t_idx=None,
+            t_val=None,
+            mode="max",
+            ax=None,
+            figure_size=None,
+            **imshow_kw,
     ):
         """
         Visualize an intensity map over (Tx, Rx) (a.k.a. sinogram).
@@ -591,7 +591,7 @@ class AcquisitionData(DataContainer):
         return ax
 
     def show_spectrum(
-        self, tx: int, rx: int, *, xunit="Hz", ax=None, figure_size=None, **line_kw
+            self, tx: int, rx: int, *, xunit="Hz", ax=None, figure_size=None, **line_kw
     ):
         """
         Plot the magnitude spectrum for a single Tx–Rx pair (frequency domain).
