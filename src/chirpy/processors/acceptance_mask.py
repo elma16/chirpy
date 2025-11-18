@@ -1,6 +1,5 @@
 """
-chirpy.processors.acceptance_mask
-======================================
+(removed, function has been moved into geometry configurator)
 
 Create and store a boolean acceptance mask excluding receivers that violate a
 ±Δ element index around each transmitter.

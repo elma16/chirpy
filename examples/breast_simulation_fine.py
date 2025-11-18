@@ -2,7 +2,7 @@ import numpy as np
 from scipy.io import loadmat
 from pathlib import Path
 
-from chirpy.geometry import ImageGrid2D, TransducerArray2D, GeometryConfigurator
+from chirpy.geometry import ImageGrid2D, TransducerArray2D,GeometryConfigurator
 from chirpy.data import AcquisitionData
 from chirpy.data.image_data import ImageData
 from chirpy.optimization.operator import WaveOperator
@@ -32,11 +32,12 @@ KWAVE_DIR = None
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
 # Grid / physics
-Nx = Ny = 240
-dx = dy = 1.0e-3
+xmax = 120e-3
+nx = ny = 480
+dx = dy = 0.5e-3
 c0_ref = 1500.0
 
-f0 = 0.3e6
+f0 = 1e6
 use_gpu = False
 use_tqdm = True
 
@@ -56,10 +57,13 @@ def main() -> None:
     # 1) Load & downsample ground-truth sound speed
     mat = loadmat(DATA_DIR / "C_true.mat")
     model_raw = mat["C_true"]  # expected 2D array
-    img_grid = ImageGrid2D(nx=Nx, ny=Ny, dx=dx)
+    img_grid = ImageGrid2D(nx=nx, dx=dx)
+
+    print(img_grid.extent, img_grid.nx)
 
     img_true = ImageData(model_raw).downsample_to(new_grid=img_grid)
     c_true = img_true.array.astype(np.float32)
+
 
     # 2) Record time and reference speed
     c_min = float(c_true.min())
@@ -103,7 +107,7 @@ def main() -> None:
     # 5) Simulate and save
     out = op.simulate()
     out_path = (
-        SAVE_DIR / f"d_obs_{Ny}x{Nx}_{dx * 1e3:.1f}mm_{f0 / 1e6:.1f}MHz_{n_tx}.npz"
+        SAVE_DIR / f"d_obs_{ny}x{nx}_{dx * 1e3:.1f}mm_{f0 / 1e6:.1f}MHz_{n_tx}.npz"
     )
     out.save(out_path)
     print(f"[ok] Saved observations → {out_path}")

@@ -5,7 +5,7 @@ chirpy.optimization.operator.helmholtz
 Single-frequency operator that wraps an internal
 :pyclass:`functions.HelmholtzSolver`.
 
-External code should **only** interact with the wave solver via the following interfaces:
+External code should **only** interact with the Helmholtz solver via the following interfaces:
 
 * ``forward(m)`` - Produces simulated complex Tx x Rx data F(m)
 * ``solve(src, adjoint=False)`` - Solves forward or adjoint wave equation for arbitrary source
@@ -27,6 +27,7 @@ from chirpy.optimization.operator.functions.HelmholtzSolver import (
     HelmholtzSolver,
 )  # internal only
 from chirpy.utils.progress import Progress, ProgressConfig
+from chirpy.geometry import GeometryConfigurator
 
 
 class HelmholtzOperator(Operator):
@@ -35,34 +36,67 @@ class HelmholtzOperator(Operator):
     # ------------------------------------------------------------------ #
     def __init__(
         self,
-        data: AcquisitionData,
-        f_idx: int,
+        data: AcquisitionData | None = None,
+        geom_config: GeometryConfigurator | None = None,
+        f_idx: int | None = None,
         *,
+        freq: float | None = None,
         sign_conv: int,
         pml_alpha: float,
         pml_size: float,
         use_gpu: bool = False,
         progress: Progress | None = None,
     ):
-        self._freq = float(data.freqs[f_idx])
+
+        if geom_config is None:
+            geom = GeometryConfigurator(data.grid, data.tx_array)
+        else:
+            geom = geom_config
+
+        self._geom = geom
+
+        if freq is not None:
+            self._freq = float(freq)
+        else:
+            if f_idx is None or data is None or not hasattr(data, "freqs"):
+                raise ValueError("Either `freq` must be provided, or `data` with `freqs` and `f_idx`.")
+            self._freq = float(data.freqs[f_idx])
+
         self._sign = int(sign_conv)
         self._a0 = float(pml_alpha)
         self._L_PML = float(pml_size)
 
-        # --- pick Tx subset & measured data --------------------------- #
-        self._tx_keep = data.ctx.get("tx_keep", np.arange(data.array.shape[0]))
-        self._mask = data.ctx["elem_mask"][self._tx_keep]  # (Tx,Rx)
-        self._REC_f = data.array[self._tx_keep, :, f_idx]  # (Tx,Rx)
+        # --- geometry / indexing via GeometryConfigurator ------------- #
+        # Element indices after TX/RX selection
+        tx_keep = self._geom.get_tx_elem_indices()          # (Tx,)
+        rx_lin_idx = self._geom.get_rx_lin_idx()            # (Rx,)
+        mask = self._geom.get_elem_mask()                   # (Tx, Rx)
 
-        # --- geometry & indexing -------------------------------------- #
-        self._x_idx = data.ctx["x_idx"][self._tx_keep]
-        self._y_idx = data.ctx["y_idx"][self._tx_keep]
-        self._gid = np.asarray(data.ctx["grid_lin_idx"], np.int64)  # (Rx,)
+        tx_roles = self._geom.get_tx_role_indices()  # role indices for array axis 0
+        rx_roles = self._geom.get_rx_role_indices()  # role indices for array axis 1
 
-        img_grid = data.grid
+        # Grid indices for each active transmitter
+        self._x_idx, self._y_idx = self._geom.get_tx_grid_indices()
+
+        # Observation data (optional)
+        if data is not None and data.array is not None and f_idx is not None:
+            rec_f = self._resolve_observed_data(
+                data.array, f_idx, tx_roles, rx_roles
+            )
+        else:
+            rec_f = None
+
+        # --- store per-shot metadata ---------------------------------- #
+        self._tx_keep = tx_keep
+        self._mask = mask  # (Tx, Rx)
+        self._gid = rx_lin_idx  # (Rx,)
+        self._REC_f = rec_f  # optional observed data
+
+        # --- geometry & indexing (grid coordinates) ------------------- #
+        img_grid = self._geom.grid
         self.ny, self.nx = img_grid.shape
         self._xi, self._yi = img_grid.xi, img_grid.yi
-        self.n_tx, self.n_rx = self._REC_f.shape
+        self.n_tx, self.n_rx = mask.shape
 
         # runtime cache
         self._cache: SimpleNamespace | None = None
@@ -74,6 +108,15 @@ class HelmholtzOperator(Operator):
     # ------------------------------------------------------------------ #
     # public helpers
     # ------------------------------------------------------------------ #
+    @property
+    def frequency(self) -> float:
+        return self._freq
+
+    @frequency.setter
+    def frequency(self, value: float) -> None:
+        self._freq = float(value)
+        self._cache = None
+
     def get_field(self, name: str):
         """
         Read-only access to cached tensors/scalars.
@@ -205,3 +248,31 @@ class HelmholtzOperator(Operator):
             idx = self._mask[s]
             out[s, idx] = WF[:, :, s].ravel(order="F")[self._gid[idx]]
         return out
+
+    # ------------------------------------------------------------------ #
+    # metadata helpers
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _resolve_observed_data(
+            array: np.ndarray | None,
+            f_idx: int,
+            tx_idx: np.ndarray,
+            rx_idx: np.ndarray,
+    ) -> np.ndarray | None:
+        if array is None:
+            return None
+
+        arr = np.asarray(array)
+        if arr.size == 0:
+            return None
+
+        if arr.ndim == 3:
+            arr = arr[..., f_idx]
+        elif arr.ndim != 2:
+            raise ValueError("Acquisition array must be 2-D or 3-D")
+
+        if arr.shape[0] <= tx_idx.max() or arr.shape[1] <= rx_idx.max():
+            raise ValueError("Tx/Rx indices out of range for acquisition array shape.")
+
+        arr = arr[np.ix_(tx_idx, rx_idx)]
+        return arr.astype(np.complex128, copy=False)

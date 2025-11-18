@@ -28,6 +28,8 @@ trace/
 .ruff_cache/
 .pytest_cache/
 
+data/
+
 # Virtual environment
 .venv/
 

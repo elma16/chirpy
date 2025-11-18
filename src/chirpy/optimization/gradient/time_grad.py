@@ -21,8 +21,7 @@ encoding is supported via a K-loop over randomized encodings.
 
 Notes
 -----
-- The operator must expose time step `dt`, `forward()`, `adjoint()` (or
-  `adjoint_one_tx()`), `get_forward_fields()`, and model accessors
+- The operator must expose time step `dt`, `forward()`, `adjoint()` `get_forward_fields()`, and model accessors
   `model_c` / `model_a`. When encoding is enabled, it should also provide
   fields/methods such as `use_encoding`, `n_tx`, `tau_step`, `enc_weights`,
   `enc_delays`, and `renew_encoded_obs()`.
@@ -215,7 +214,7 @@ class AdjointStateGrad(GradientEvaluator):
         ------------
         - When K>1 and encoding is enabled:
           * Draws encodings, renews encoded observations on the operator,
-            and sums gradients over K trials (no averaging).
+            and averages gradients over K trials (no averaging).
           * Stores the list of encodings in `_last_encodings`.
           * Calls `_residual_callback` with a stack of raw residuals (shape (K, ...))
             if the callback is set.
@@ -224,18 +223,19 @@ class AdjointStateGrad(GradientEvaluator):
         op = self._op
 
         # ---------- K-loop averaging (encoding) ---------------------- #
-        if self._K and getattr(op, "use_encoding", False):
+        if getattr(op, "use_encoding", False):
             if q is not None:
-                raise ValueError("q must be None when K>1 and encoding enabled")
+                raise ValueError("q must be None when encoding is enabled")
 
+            K_eff = self._K if self._K else 1
             g_sum = np.zeros_like(m, np.float64)
-            print(f"[TD-Grad] K-loop averaging start  (K={self._K}, kind={kind})")
+            print(f"[TD-Grad] K-loop averaging start  (K={K_eff}, kind={kind})")
 
             # reset encodings cache
             self._last_encodings = []
-            res_list = []
+            res_list: List[np.ndarray] = []
 
-            for k in range(self._K):
+            for k in range(K_eff):
                 # Random ±1 weights & delays
                 op.enc_weights = self._rng.choice([-1, 1], op.n_tx).astype(np.float32)
                 tau = getattr(op, "tau_step", 0)
@@ -247,7 +247,7 @@ class AdjointStateGrad(GradientEvaluator):
                     op.enc_delays = np.zeros(op.n_tx, np.int32)
                 op.renew_encoded_obs()
 
-                # call forward to generate residuals
+                # record encoding
                 self._last_encodings.append(
                     (op.enc_weights.copy(), op.enc_delays.copy())
                 )
@@ -261,33 +261,23 @@ class AdjointStateGrad(GradientEvaluator):
                 g_sum += g_k
 
                 print(
-                    f"   ➤ encoding #{k + 1}/{self._K}  |g_k|_max={np.max(np.abs(g_k)):.3e}"
+                    f"   ➤ encoding #{k + 1}/{K_eff}  |g_k|_max={np.max(np.abs(g_k)):.3e}"
                 )
 
-            R = np.stack(res_list, axis=0)
             if self._residual_callback is not None:
-                self._residual_callback(R)
+                if K_eff > 1:
+                    self._residual_callback(np.stack(res_list, axis=0))
+                else:
+                    self._residual_callback(res_list[0])
 
-            return g_sum
+            return g_sum / float(K_eff)
 
-        # ---------- single-shot path (no encoding or K<=1) ------------- #
+        # ---------- single-shot path (no encoding) ------------- #
         if q is None:
-            if getattr(op, "use_encoding", False):
-                if op.enc_weights is None:
-                    op.enc_weights = self._rng.choice([-1, 1], op.n_tx).astype(
-                        np.float32
-                    )
-                    op.enc_delays = np.zeros(op.n_tx, np.int32)
-                    op.renew_encoded_obs()
-                res_raw = op.forward(m, kind=kind) - op.get_field("obs_data")
-                res = res_raw * self._w
-                if self._residual_callback is not None:
-                    self._residual_callback(res_raw)
-            else:
-                raise ValueError("q cannot be None when encoding disabled")
-        else:
-            res = q
-            self._last_encodings = None
+            raise ValueError("q cannot be None when encoding disabled")
+
+        res = q
+        self._last_encodings = None
 
         return self._single_grad(m, res, kind)
 
@@ -325,8 +315,6 @@ class AdjointStateGrad(GradientEvaluator):
         Notes
         -----
         - Central differences with edge padding are used for time derivatives.
-        - If `op.drop_self_rx` is True, uses `op.adjoint_one_tx` per transmitter; else
-          calls `op.adjoint` with a single-shot batch slice.
         """
         op, dt = self._op, self._op.dt
 
@@ -334,11 +322,15 @@ class AdjointStateGrad(GradientEvaluator):
         need_fwd = (op._cache is None) or (op.get_forward_fields() is None)
         if not need_fwd:
             if kind == "c":
-                need_fwd = not np.array_equal(m, op.model_c)
+                m_cast = m.astype(op.model_c.dtype, copy=False)
+                need_fwd = not np.array_equal(m_cast, op.model_c)
+                # need_fwd = not np.array_equal(m, op.model_c)
             else:
-                need_fwd = not np.array_equal(m, op.model_a)
+                m_cast = m.astype(op.model_a.dtype, copy=False)
+                need_fwd = not np.array_equal(m_cast, op.model_a)
+                # need_fwd = not np.array_equal(m, op.model_a)
         if need_fwd:
-            # print(f"[TD-Grad]   (re)running forward({kind}) to refresh cache")
+            print(f"[TD-Grad]   (re)running forward({kind}) to refresh cache")
             op.forward(m, kind=kind)
 
         # sensitivity kernel K
@@ -372,16 +364,10 @@ class AdjointStateGrad(GradientEvaluator):
         if not getattr(op, "use_encoding", False):
             WF = op.get_forward_fields().astype(np.float64)  # (Tx, nt, ny, nx)
             print(f"[TD-Grad] non-encoding, Tx={WF.shape[0]}, res shape={res.shape}")
-            if getattr(op, "drop_self_rx", False):
-                for tx in range(WF.shape[0]):
-                    u = WF[tx]
-                    lam = op.adjoint_one_tx(res[tx], tx)  # (nt, ny, nx)
-                    g += _accum_c(u, lam) if kind == "c" else _accum_a(u, lam)
-            else:
-                for tx in range(WF.shape[0]):
-                    u = WF[tx]
-                    lam = op.adjoint(res[tx : tx + 1])
-                    g += _accum_c(u, lam) if kind == "c" else _accum_a(u, lam)
+            for tx in range(WF.shape[0]):
+                u = WF[tx]
+                lam = op.adjoint(res[tx: tx + 1])  # shape (1, n_rx, nt) → lam: (nt, ny, nx)
+                g += _accum_c(u, lam) if kind == "c" else _accum_a(u, lam)
         else:
             u = op.get_forward_fields().astype(np.float64)[0]
             lam = op.adjoint(res)

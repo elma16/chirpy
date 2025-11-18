@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from pathlib import Path
 
-from chirpy.geometry import ImageGrid2D, TransducerArray2D
+from chirpy.geometry import ImageGrid2D, TransducerArray2D, GeometryConfigurator
 from chirpy.data import AcquisitionData, ImageData
 from chirpy.optimization.operator import WaveOperator
 from chirpy.optimization.gradient import AdjointStateGrad
 from chirpy.optimization.function import NonlinearLS
-from chirpy.optimization.algorithm import GD, CG_Time
+from chirpy.optimization.algorithm import GD, CG_Time, SGD
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
 from chirpy.utils.paths import detect_root
@@ -26,7 +26,8 @@ Process:
 """
 
 # --------------------------- Configuration --------------------------- #
-ROOT_DIR = detect_root()
+# ROOT_DIR = detect_root()
+ROOT_DIR = Path.cwd()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
@@ -36,12 +37,12 @@ progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
 # Inversion controls
 USE_ENCODING = True
-K = 80
+K = 1
 TAU_MAX = 0.0
 DROP_SELF_RX = True
 NORMALIZE = True
-N_ITER = 20
-ALGO = "GD"  # {"GD","CG_Time"}
+N_ITER = 100
+ALGO = "SGD"  # {"GD","CG_Time","SGD"}
 ETA0 = 6.0e-1
 PLOT_TIMELINE = True
 
@@ -61,6 +62,15 @@ def compute_record_time(grid: ImageGrid2D, c_min: float, pad: float = 1.3) -> fl
     Lx = grid.extent[1] - grid.extent[0]
     return float(pad * Lx / c_min)
 
+def sgd_schedule(k: int, lr0: float) -> float:
+    """
+    Simple polynomial decay schedule:
+        lr_k = lr0 / (1 + gamma * k)^p
+    """
+    gamma = 0.03
+    p = 2.0
+    return lr0 / ((1.0 + gamma * k) ** p)
+
 
 def main() -> None:
     # 1) Load & downsample C_true to get c_ref/record_time
@@ -75,12 +85,13 @@ def main() -> None:
     # 2) Ring array and load observations from prior simulation
     tx_array = TransducerArray2D.from_ring_array_2D(r=radius, grid=grid, n=n_tx)
     obs_path = (
-        SAVE_DIR / f"d_obs_{Ny}x{Nx}_{dx * 1e3:.0f}mm_{f0 / 1e6:.1f}MHz_{n_tx}.npz"
+        SAVE_DIR / f"d_obs_{Ny}x{Nx}_{dx * 1e3:.1f}mm_{f0 / 1e6:.1f}MHz_{n_tx}.npz"
     )
     dat = np.load(obs_path, allow_pickle=True)
     d_obs, t_vec = dat["array"], dat["time"]
 
     acq_inv = AcquisitionData(array=d_obs, tx_array=tx_array, grid=grid, time=t_vec)
+    geom = GeometryConfigurator(grid, tx_array)
 
     # 3) Medium (fixed for inversion), operator, gradient, LS
     medium = {
@@ -92,11 +103,12 @@ def main() -> None:
     pulse = GaussianModulatedPulse(f0=f0, frac_bw=0.75, amp=1.0)
     op = WaveOperator(
         data=acq_inv,
+        geom_config=geom,
         medium_params=medium,
         record_time=record_time,
         record_full_wf=True,
         use_encoding=USE_ENCODING,
-        drop_self_rx=DROP_SELF_RX,
+        # drop_self_rx=DROP_SELF_RX,
         pulse=pulse,
         c_ref=c_ref,
         use_gpu=use_gpu,
@@ -118,6 +130,14 @@ def main() -> None:
 
     if ALGO == "CG_Time":
         solver = CG_Time(viz=viz, progress=progress)
+    elif ALGO == "SGD":
+        solver = SGD(
+            lr=50*ETA0,
+            schedule_fn=sgd_schedule,
+            momentum=0.9,
+            viz=viz,
+            progress=progress,
+        )
     else:
         solver = GD(
             lr=50 * ETA0,
