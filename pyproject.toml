@@ -31,6 +31,13 @@ dev = [
     "nbconvert"
 ]
 
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "myst-parser",
+    "sphinx-autodoc-typehints",
+]
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "C"]
 ignore = ["E501"]

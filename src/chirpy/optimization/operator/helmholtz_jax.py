@@ -472,7 +472,86 @@ def _applyBlockLU_jax_single(
 
 
 # ############################################################################
-# 5. JAX Solver Class
+# 5. Jitted setup function with dynamic frequency
+# ############################################################################
+
+
+@partial(jax.jit, static_argnames=("Nx", "Ny"))
+def setup_helmholtz_jax(
+    vel_arr: jnp.ndarray,
+    atten_arr: jnp.ndarray,
+    f: float,
+    sign: float,
+    a0: float,
+    L_PML: float,
+    Nx: int,
+    Ny: int,
+    xmin: float,
+    xmax: float,
+    ymin: float,
+    ymax: float,
+    h: float,
+    g: float,
+) -> Tuple[Factors, jnp.ndarray, jnp.ndarray]:
+    """
+    JIT-compiled setup function that builds PML, stencil, and block-LU factors
+    for a given velocity, attenuation, and frequency on a fixed grid.
+
+    Nx, Ny, geometry and grid spacing are static args (compile-time),
+    while vel_arr, atten_arr, f, sign, a0, L_PML are dynamic (run-time).
+    """
+    # --- Complex velocity and wavenumber ---
+    SI = atten_arr / (2.0 * jnp.pi)
+    V = 1.0 / (1.0 / vel_arr + 1j * SI * jnp.sign(sign))
+    k_sq = ((2.0 * jnp.pi * f) / V) ** 2
+
+    # --- PML ---
+    xe = jnp.linspace(xmin, xmax, 2 * (Nx - 1) + 1)
+    ye = jnp.linspace(ymin, ymax, 2 * (Ny - 1) + 1)
+    Xe, Ye = jnp.meshgrid(xe, ye, indexing="xy")
+
+    xctr = 0.5 * (xmin + xmax)
+    xspan = 0.5 * (xmax - xmin)
+    yctr = 0.5 * (ymin + ymax)
+    yspan = 0.5 * (ymax - ymin)
+
+    sx = (
+        2.0
+        * jnp.pi
+        * a0
+        * f
+        * (jnp.maximum(jnp.abs(Xe - xctr) - xspan + L_PML, 0.0) / L_PML) ** 2
+    )
+    sy = (
+        2.0
+        * jnp.pi
+        * a0
+        * f
+        * (jnp.maximum(jnp.abs(Ye - yctr) - yspan + L_PML, 0.0) / L_PML) ** 2
+    )
+
+    ex = 1.0 + 1j * sx * jnp.sign(sign) / (2.0 * jnp.pi * f)
+    ey = 1.0 + 1j * sy * jnp.sign(sign) / (2.0 * jnp.pi * f)
+    bigA, bigB, bigC = ey / ex, ex / ey, ex * ey
+
+    A = bigA[0::2, 1::2]
+    B = bigB[1::2, 0::2]
+    C = bigC[0::2, 0::2]
+
+    # --- Stencil parameters ---
+    b, d, e = stencilOptParams_jax(jnp.min(vel_arr), jnp.max(vel_arr), f, h, g)
+
+    # --- Assemble 9 block diagonals ---
+    all_diags = assemble_helmholtz_blocks_jax(k_sq, A, B, C, b, d, e, h, g)
+
+    # --- Compute LU factors ---
+    factors = decompBlockLU_jax(Ny, Nx, *all_diags)
+
+    return factors, C, V
+
+
+# ############################################################################
+# 6. JAX Solver Class
 # ############################################################################
 
 
@@ -482,6 +561,9 @@ class HelmholtzSolverJAX:
 
     This class replicates the algorithm from the original HelmholtzSolver,
     but uses JAX for all computations.
+
+    The heavy setup path is jitted with frequency as a dynamic argument, so
+    code is compiled once per grid size and reused across frequencies.
     """
 
     def __init__(
@@ -506,116 +588,96 @@ class HelmholtzSolverJAX:
         self.Ny, self.Nx = vel.shape
 
         # Use float64-friendly computations if enabled globally
-        self.h = float(jnp.mean(jnp.diff(self.x.ravel())))
-        self.gh = float(jnp.mean(jnp.diff(self.y.ravel())))
+        float_dtype = (
+            jnp.float64 if getattr(jax.config, "x64_enabled", False) else jnp.float32
+        )
+
+        self.h = float(jnp.mean(jnp.diff(self.x.ravel()).astype(float_dtype)))
+        self.gh = float(jnp.mean(jnp.diff(self.y.ravel()).astype(float_dtype)))
         self.g = self.gh / self.h
 
         self.xmin, self.xmax = float(jnp.min(self.x)), float(jnp.max(self.x))
         self.ymin, self.ymax = float(jnp.min(self.y)), float(jnp.max(self.y))
 
-        self._sign = int(signConvention)
+        self._sign = float(signConvention)
         self._a0 = float(a0)
         self._L_PML = float(L_PML)
 
         print(f"[HelmholtzSolverJAX] Initializing {self.Ny}x{self.Nx} solver...")
 
-        # --- JIT-compiled setup ---
-        self.factors, self.PML, self.V = self._setup(
-            vel, atten, self.f, self._sign, self._a0, self._L_PML
+        # Coerce medium fields to JAX arrays
+        self._vel_j = jnp.asarray(vel, dtype=float_dtype)
+        self._atten_j = jnp.asarray(atten, dtype=float_dtype)
+
+        # --- JIT-compiled setup (frequency is dynamic) ---
+        self.factors, self.PML, self.V = setup_helmholtz_jax(
+            self._vel_j,
+            self._atten_j,
+            float(self.f),
+            self._sign,
+            self._a0,
+            self._L_PML,
+            self.Nx,
+            self.Ny,
+            self.xmin,
+            self.xmax,
+            self.ymin,
+            self.ymax,
+            self.h,
+            self.g,
         )
 
-        print("[HelmholtzSolverJAX] Factors computed and JIT-compiled.")
+        print("[HelmholtzSolverJAX] Factors computed (JIT compiled).")
 
         # --- Compile vmapped solvers ---
         self._solve_forward, self._solve_adjoint = self._compile_solvers()
         print("[HelmholtzSolverJAX] Solvers JIT-compiled.")
 
-    def _setup(
+    def refactor_for_frequency(
         self,
-        vel: np.ndarray,
-        atten: np.ndarray,
         f: float,
-        signConvention: int,
-        a0: float,
-        L_PML: float,
-    ) -> Tuple[Factors, jnp.ndarray, jnp.ndarray]:
+        vel: np.ndarray | None = None,
+        atten: np.ndarray | None = None,
+    ) -> None:
         """
-        Compute all factors (PML, stencil, LU) in a JIT-compiled function.
-        """
+        Optional helper: recompute factors for a new frequency and/or medium,
+        reusing the compiled setup_helmholtz_jax for this grid.
 
-        vel_j = jnp.asarray(vel, dtype=jnp.float64 if jax.config.x64_enabled else None)
-        atten_j = jnp.asarray(
-            atten, dtype=jnp.float64 if jax.config.x64_enabled else None
+        Args:
+            f: new frequency [Hz]
+            vel: optional new velocity model (Ny, Nx)
+            atten: optional new attenuation model (Ny, Nx)
+        """
+        if vel is not None:
+            vel = np.asarray(vel)
+            assert vel.shape == (self.Ny, self.Nx)
+            float_dtype = self._vel_j.dtype
+            self._vel_j = jnp.asarray(vel, dtype=float_dtype)
+
+        if atten is not None:
+            atten = np.asarray(atten)
+            assert atten.shape == (self.Ny, self.Nx)
+            float_dtype = self._atten_j.dtype
+            self._atten_j = jnp.asarray(atten, dtype=float_dtype)
+
+        self.f = float(f)
+
+        self.factors, self.PML, self.V = setup_helmholtz_jax(
+            self._vel_j,
+            self._atten_j,
+            float(self.f),
+            self._sign,
+            self._a0,
+            self._L_PML,
+            self.Nx,
+            self.Ny,
+            self.xmin,
+            self.xmax,
+            self.ymin,
+            self.ymax,
+            self.h,
+            self.g,
         )
-        sign = float(signConvention)
-        a0_j = float(a0)
-        Lpml_j = float(L_PML)
-        f_j = float(f)
-
-        Nx = self.Nx
-        Ny = self.Ny
-        xmin, xmax = self.xmin, self.xmax
-        ymin, ymax = self.ymin, self.ymax
-        h = self.h
-        g = self.g
-
-        @jax.jit
-        def _setup_internal(
-            vel_arr: jnp.ndarray, atten_arr: jnp.ndarray
-        ) -> Tuple[Factors, jnp.ndarray, jnp.ndarray]:
-            # --- Complex velocity and wavenumber ---
-            SI = atten_arr / (2.0 * jnp.pi)
-            V = 1.0 / (1.0 / vel_arr + 1j * SI * jnp.sign(sign))
-            k_sq = ((2.0 * jnp.pi * f_j) / V) ** 2
-
-            # --- PML ---
-            xe = jnp.linspace(xmin, xmax, 2 * (Nx - 1) + 1)
-            ye = jnp.linspace(ymin, ymax, 2 * (Ny - 1) + 1)
-            Xe, Ye = jnp.meshgrid(xe, ye, indexing="xy")
-
-            xctr = 0.5 * (xmin + xmax)
-            xspan = 0.5 * (xmax - xmin)
-            yctr = 0.5 * (ymin + ymax)
-            yspan = 0.5 * (ymax - ymin)
-
-            sx = (
-                2.0
-                * jnp.pi
-                * a0_j
-                * f_j
-                * (jnp.maximum(jnp.abs(Xe - xctr) - xspan + Lpml_j, 0.0) / Lpml_j) ** 2
-            )
-            sy = (
-                2.0
-                * jnp.pi
-                * a0_j
-                * f_j
-                * (jnp.maximum(jnp.abs(Ye - yctr) - yspan + Lpml_j, 0.0) / Lpml_j) ** 2
-            )
-
-            ex = 1.0 + 1j * sx * jnp.sign(sign) / (2.0 * jnp.pi * f_j)
-            ey = 1.0 + 1j * sy * jnp.sign(sign) / (2.0 * jnp.pi * f_j)
-            bigA, bigB, bigC = ey / ex, ex / ey, ex * ey
-
-            A = bigA[0::2, 1::2]
-            B = bigB[1::2, 0::2]
-            C = bigC[0::2, 0::2]
-
-            # --- Stencil parameters ---
-            b, d, e = stencilOptParams_jax(
-                jnp.min(vel_arr), jnp.max(vel_arr), f_j, h, g
-            )
-
-            # --- Assemble 9 block diagonals ---
-            all_diags = assemble_helmholtz_blocks_jax(k_sq, A, B, C, b, d, e, h, g)
-
-            # --- Compute LU factors ---
-            factors = decompBlockLU_jax(Ny, Nx, *all_diags)
-
-            return factors, C, V
-
-        # Run the JIT-compiled setup
-        return _setup_internal(vel_j, atten_j)
 
     def _compile_solvers(self) -> Tuple[Callable, Callable]:
         """
@@ -650,7 +712,11 @@ class HelmholtzSolverJAX:
                 virt: Virtual source, shape (Ny, Nx, K)
         """
         # Ensure src is a JAX array with a consistent complex dtype
-        dtype = jnp.complex128 if jax.config.x64_enabled else jnp.complex64
+        dtype = (
+            jnp.complex128
+            if getattr(jax.config, "x64_enabled", False)
+            else jnp.complex64
+        )
         src_jax = jnp.asarray(src, dtype=dtype)
 
         # Transpose from (Ny, Nx, K) to (K, Nx, Ny) for vmapped solver

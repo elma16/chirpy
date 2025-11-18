@@ -2,8 +2,6 @@
 """
 Comparison script: Original Helmholtz (CuPy/SciPy) vs JAX Helmholtz.
 
-NO FLAGS.
-Behavior:
     - If CuPy is installed → original uses GPU.
     - If CuPy is NOT installed → original uses SciPy (CPU).
     - JAX uses whatever backend it is already configured to use.
@@ -40,7 +38,7 @@ except Exception:
 # -----------------------------------------------------------------------------
 import jax
 
-jax.config.update("jax_enable_x64", False)  # match SciPy numerics
+jax.config.update("jax_enable_x64", True)  # match SciPy numerics
 
 devices = jax.devices()
 if not devices:
