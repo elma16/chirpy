@@ -38,6 +38,10 @@ docs = [
     "sphinx-autodoc-typehints",
 ]
 
+jax_backend = [
+    "jax"
+]
+
 [tool.ruff.lint]
 select = ["E", "F", "W", "C"]
 ignore = ["E501"]

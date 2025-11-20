@@ -95,6 +95,7 @@ class Pipeline:
         return data
 
     def _log(self, msg: str) -> None:
+        """Send a progress message to either the provided logger or stdout when verbose."""
         if self._logger is not None:
             self._logger.info(msg)
         elif self._verbose:

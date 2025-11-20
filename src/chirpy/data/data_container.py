@@ -59,32 +59,49 @@ class DataContainer:
         )
 
     def reshape(self, new_shape):
+        """Return a reshaped view of ``array`` wrapped in a new container."""
         return self._wrap(self.array.reshape(new_shape))
 
     def get_slice(self, index, axis=0):
+        """
+        Extract a slice along ``axis`` and return it as the same container type.
+
+        Parameters
+        ----------
+        index : int
+            Index into ``axis``.
+        axis : int, optional
+            Axis to slice (default 0).
+        """
         slicer = [slice(None)] * self.array.ndim
         slicer[axis] = index
         return self._wrap(self.array[tuple(slicer)])
 
     def reorder(self, order):
+        """Permute axes according to ``order``."""
         return self._wrap(np.transpose(self.array, order))
 
     def pad(self, pad_width, mode="constant", **kwargs):
+        """Pad the underlying array and keep geometry / ctx intact."""
         return self._wrap(np.pad(self.array, pad_width, mode=mode, **kwargs))
 
     def crop(self, slices):
+        """Apply numpy slicing and preserve container metadata."""
         return self._wrap(self.array[slices])
 
     def fft(self, axis=-1):
+        """Return an FFT along ``axis`` wrapped in a new container."""
         return self._wrap(np.fft.fft(self.array, axis=axis))
 
     def ifft(self, axis=-1):
+        """Return an inverse FFT along ``axis`` wrapped in a new container."""
         return self._wrap(np.fft.ifft(self.array, axis=axis))
 
     # ------------------------------------------------------------------
     # arithmetic
     # ------------------------------------------------------------------
     def _binary_op(self, other, op):
+        """Apply a numpy binary op, handling both scalars and other containers."""
         arr = (
             op(self.array, other.array)
             if isinstance(other, DataContainer)

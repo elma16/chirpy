@@ -39,6 +39,16 @@ pip install ".[gpu]"
 
 **Note**: Check the [CuPy installation guide](https://docs.cupy.dev/en/stable/install.html) to verify hardware compatibility before installing GPU dependencies.
 
+### JAX Helmholtz backend
+
+To use the JAX-based Helmholtz solver (`chirpy.optimization.operator.helmholtz_jax`):
+
+```bash
+pip install ".[jax_backend]"
+```
+
+For numerical parity with SciPy, enable 64-bit by setting `JAX_ENABLE_X64=1` (or calling `jax.config.update("jax_enable_x64", True)` in your code).
+
 ### Development Installation
 
 ```bash
@@ -62,6 +72,22 @@ pre-commit install
 > Once built, point Chirpy’s `WaveOperator` to your compiled `kspaceFirstOrder-OMP` binary from this repository.  
 >
 > For more details, see: [elma16/k-wave-omp-darwin](https://github.com/elma16/k-wave-omp-darwin).
+
+### Build the docs locally
+
+Install the docs extras:
+
+```bash
+pip install ".[docs]"
+```
+
+Build HTML into `docs/_build/html`:
+
+```bash
+sphinx-build -b html docs docs/_build/html
+```
+
+Open `docs/_build/html/index.html` to browse the documentation locally.
 
 
 ### Run examples in Google Colab
@@ -94,4 +120,3 @@ pre-commit install
 **[1]** Ali, R., Mitcham, T. M., Brevett, T., Agudo, Ò. C., Martinez, C. D., Li, C., Doyley, M. M., & Duric, N. (2024). 2-D Slicewise Waveform Inversion of Sound Speed and Acoustic Attenuation for Ring Array Ultrasound Tomography Based on a Block LU Solver. *IEEE Transactions on Medical Imaging*, 1-1. https://doi.org/10.1109/TMI.2024.3383816
 
 **Associated Code**: https://github.com/rehmanali1994/WaveformInversionUST
-

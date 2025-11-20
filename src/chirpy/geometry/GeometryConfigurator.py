@@ -63,6 +63,7 @@ class GeometryConfigurator:
     # initialisation helpers
     # ------------------------------------------------------------------
     def _init_element_indices(self) -> None:
+        """Compute grid indices and flattened indices for every element position."""
         positions = np.asarray(self.tx_array.positions, dtype=float)
         if positions.ndim != 2 or positions.shape[0] != 2:
             raise ValueError("transducer positions must have shape (2, N)")
@@ -85,6 +86,7 @@ class GeometryConfigurator:
         self.elem_lin_idx = lin_idx
 
     def _init_base_roles(self) -> None:
+        """Identify which element indices are TX/RX and build lookup tables."""
         tx_all = np.nonzero(self.tx_array.is_tx)[0].astype(np.int64)
         rx_all = np.nonzero(self.tx_array.is_rx)[0].astype(np.int64)
 
@@ -107,6 +109,7 @@ class GeometryConfigurator:
     # acceptance mask (TX×RX)
     # ------------------------------------------------------------------
     def _rebuild_acceptance_mask(self) -> None:
+        """Recompute TX×RX acceptance matrix after selection or configuration changes."""
         if self.tx_keep.size == 0:
             raise ValueError("at least one transmitter must remain active")
         if self.rx_keep.size == 0:
@@ -159,6 +162,16 @@ class GeometryConfigurator:
         step: Optional[int] = None,
         indices: Optional[Sequence[int]] = None,
     ) -> None:
+        """
+        Activate a subset of transmitters by stride or explicit indices.
+
+        Parameters
+        ----------
+        step : int, optional
+            Keep every ``step``-th TX in element order (``1`` → no change).
+        indices : sequence of int, optional
+            Explicit element indices to keep. Must refer to TX-capable elements.
+        """
         if indices is not None:
             arr = np.asarray(indices, dtype=np.int64).ravel()
             if arr.size == 0:
@@ -187,6 +200,16 @@ class GeometryConfigurator:
         step: Optional[int] = None,
         indices: Optional[Sequence[int]] = None,
     ) -> None:
+        """
+        Activate a subset of receivers by stride or explicit indices.
+
+        Parameters
+        ----------
+        step : int, optional
+            Keep every ``step``-th RX in element order (``1`` → no change).
+        indices : sequence of int, optional
+            Explicit element indices to keep. Must refer to RX-capable elements.
+        """
         if indices is not None:
             arr = np.asarray(indices, dtype=np.int64).ravel()
             if arr.size == 0:
@@ -235,25 +258,31 @@ class GeometryConfigurator:
     # getters
     # ------------------------------------------------------------------
     def get_tx_elem_indices(self) -> np.ndarray:
+        """Element indices for currently active transmitters."""
         return self.tx_keep
 
     def get_rx_elem_indices(self) -> np.ndarray:
+        """Element indices for currently active receivers."""
         return self.rx_keep
 
     def get_tx_grid_indices(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Grid (x_idx, y_idx) tuples for active transmitters."""
         x = self.elem_x_idx[self.tx_keep]
         y = self.elem_y_idx[self.tx_keep]
         return x, y
 
     def get_rx_grid_indices(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Grid (x_idx, y_idx) tuples for active receivers."""
         x = self.elem_x_idx[self.rx_keep]
         y = self.elem_y_idx[self.rx_keep]
         return x, y
 
     def get_rx_lin_idx(self) -> np.ndarray:
+        """Flat grid indices (Fortran order) for active receivers."""
         return self.rx_lin_idx
 
     def get_elem_mask(self) -> np.ndarray:
+        """TX×RX boolean acceptance mask (TX rows, RX columns)."""
         return self.elem_mask
 
     # ------------------------------------------------------------------
