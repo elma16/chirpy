@@ -319,19 +319,28 @@ class AdjointStateGrad(GradientEvaluator):
         op, dt = self._op, self._op.dt
 
         # --- check and prepare forward cache ---
-        need_fwd = (op._cache is None) or (op.get_forward_fields() is None)
+        cache = getattr(op, "_cache", None)
+        wf_cached = None if cache is None else getattr(cache, "WF", None)
+        need_fwd = cache is None or wf_cached is None
         if not need_fwd:
             if kind == "c":
                 m_cast = m.astype(op.model_c.dtype, copy=False)
                 need_fwd = not np.array_equal(m_cast, op.model_c)
-                # need_fwd = not np.array_equal(m, op.model_c)
             else:
                 m_cast = m.astype(op.model_a.dtype, copy=False)
                 need_fwd = not np.array_equal(m_cast, op.model_a)
-                # need_fwd = not np.array_equal(m, op.model_a)
         if need_fwd:
+            # gradients require wavefields; ensure they are recorded even if the operator
+            # was initialised with record_full_wf=False
+            op.record_full_wf = True
             print(f"[TD-Grad]   (re)running forward({kind}) to refresh cache")
             op.forward(m, kind=kind)
+            cache = op._cache
+            wf_cached = None if cache is None else getattr(cache, "WF", None)
+            if wf_cached is None:
+                raise RuntimeError(
+                    "Forward did not produce wavefields; ensure record_full_wf=True."
+                )
 
         # sensitivity kernel K
         c_cur = op.model_c
@@ -366,7 +375,9 @@ class AdjointStateGrad(GradientEvaluator):
             print(f"[TD-Grad] non-encoding, Tx={WF.shape[0]}, res shape={res.shape}")
             for tx in range(WF.shape[0]):
                 u = WF[tx]
-                lam = op.adjoint(res[tx: tx + 1])  # shape (1, n_rx, nt) → lam: (nt, ny, nx)
+                lam = op.adjoint(
+                    res[tx : tx + 1]
+                )  # shape (1, n_rx, nt) → lam: (nt, ny, nx)
                 g += _accum_c(u, lam) if kind == "c" else _accum_a(u, lam)
         else:
             u = op.get_forward_fields().astype(np.float64)[0]

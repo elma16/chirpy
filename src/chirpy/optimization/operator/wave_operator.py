@@ -128,30 +128,30 @@ class WaveOperator(Operator):
 
     # ------------------------------------------------------------------
     def __init__(
-            self,
-            medium_params: dict ,
-            record_time: float,
-            *,
-            data: AcquisitionData | None = None,
-            geom_config: GeometryConfigurator | None = None,
-            tau_max: float = 0.0,
-            use_encoding: bool = False,
-            drop_self_rx: bool = False,
-            record_full_wf: bool = True,
-            cfl: float = 0.3,
-            c_ref: float = 1580,
-            pml_size: int = 10,
-            pml_alpha: float = 10.0,
-            encoding_seed: Optional[int] = None,
-            # ---------- new opts -----------------------------------------
-            pulse: Pulse | None = None,
-            scale_source_terms: bool = True,
-            src_mode: str = "additive",  # 'additive' or 'dirichlet'
-            pml_inside: bool = False,
-            use_gpu: bool = False,
-            verbose: bool = False,
-            progress: Progress | None = None,
-            binary_path: Path = None,
+        self,
+        medium_params: dict,
+        record_time: float,
+        *,
+        data: AcquisitionData | None = None,
+        geom_config: GeometryConfigurator | None = None,
+        tau_max: float = 0.0,
+        use_encoding: bool = False,
+        drop_self_rx: bool = False,
+        record_full_wf: bool = True,
+        cfl: float = 0.3,
+        c_ref: float = 1580,
+        pml_size: int = 10,
+        pml_alpha: float = 10.0,
+        encoding_seed: Optional[int] = None,
+        # ---------- new opts -----------------------------------------
+        pulse: Pulse | None = None,
+        scale_source_terms: bool = True,
+        src_mode: str = "additive",  # 'additive' or 'dirichlet'
+        pml_inside: bool = False,
+        use_gpu: bool = False,
+        verbose: bool = False,
+        progress: Progress | None = None,
+        binary_path: Path = None,
     ):
         super().__init__()
 
@@ -167,7 +167,9 @@ class WaveOperator(Operator):
 
         if use_encoding:
             if drop_self_rx:
-                print("[WaveOperator][WARNING] drop_self_rx ignored when use_encoding=True.")
+                print(
+                    "[WaveOperator][WARNING] drop_self_rx ignored when use_encoding=True."
+                )
             geom.configure_acceptance(delta=-1)
 
         self._geom = geom
@@ -251,10 +253,20 @@ class WaveOperator(Operator):
         # ---------- 6. receiver masks -------------------------------
         # Active receiver elements and their linear indices
         rx_elem_indices = geom.get_rx_elem_indices()  # element indices of active RX
-        lin_each = geom.elem_lin_idx[rx_elem_indices].astype(np.int64)
+        # k-Wave linear indices after transpose: ix + nx*iy
+        lin_each = geom.elem_x_idx[rx_elem_indices].astype(
+            np.int64
+        ) + self.nx * geom.elem_y_idx[rx_elem_indices].astype(np.int64)
 
         lin_full = self._rx_lin_idx_full  # linear indices in k-Wave order
-        self.idx_elem2kw = np.searchsorted(lin_full, lin_each).astype(np.int64)
+        # build mapping safely (no assumption about sorted membership beyond equality)
+        lin_map = {val: i for i, val in enumerate(lin_full.tolist())}
+        try:
+            self.idx_elem2kw = np.array([lin_map[v] for v in lin_each], dtype=np.int64)
+        except KeyError as exc:  # pragma: no cover - defensive
+            raise ValueError(
+                "Receiver index mapping failed; receiver outside k-Wave mask"
+            ) from exc
 
         self.idx_kw2elem = np.empty(self.n_rx_full, dtype=np.int64)
         self.idx_kw2elem[self.idx_elem2kw] = np.arange(self.n_rx_full, dtype=np.int64)
@@ -387,10 +399,14 @@ class WaveOperator(Operator):
             raise ValueError(
                 f"Expected obs to have n_rx={self.n_rx_full}, got {data_tx_rx_t.shape[1]}"
             )
-        pad_len = 0
-        if data_tx_rx_t.shape[-1] < self.nt:
-            pad_len = self.nt - data_tx_rx_t.shape[-1]
+        orig_len = data_tx_rx_t.shape[-1]
+        pad_len = trim_len = 0
+        if orig_len < self.nt:
+            pad_len = self.nt - orig_len
             data_tx_rx_t = np.pad(data_tx_rx_t, ((0, 0), (0, 0), (0, pad_len)))
+        elif orig_len > self.nt:
+            trim_len = orig_len - self.nt
+            data_tx_rx_t = data_tx_rx_t[..., : self.nt]
 
         data_kw = data_tx_rx_t[:, self.idx_kw2elem, :]
         self.obs_data_full = data_kw.astype(np.float64, copy=False)
@@ -408,7 +424,7 @@ class WaveOperator(Operator):
 
         Tx, Rx, nt = data_tx_rx_t.shape
         print(
-            f"[TDO-ENC] set_obs | shape={Tx}×{Rx}×{nt}, order=element, pad={pad_len} samp"
+            f"[TDO-ENC] set_obs | shape={Tx}×{Rx}×{nt}, order=element, pad={pad_len} samp, trim={trim_len} samp"
         )
 
     def _shift_right(self, arr: np.ndarray, d: int) -> np.ndarray:
@@ -423,9 +439,9 @@ class WaveOperator(Operator):
         for internal calculation purposes only. For external viewing, please use _fields['obs_data'] (element order).
         """
         if (
-                self.obs_data_full is None
-                or self.enc_weights is None
-                or self.enc_delays is None
+            self.obs_data_full is None
+            or self.enc_weights is None
+            or self.enc_delays is None
         ):
             raise RuntimeError("obs_data_full or encoding vectors not ready")
         enc = np.zeros((1, self.n_rx_full, self.nt), dtype=self.obs_data_full.dtype)
@@ -455,12 +471,12 @@ class WaveOperator(Operator):
     # k-Wave low-level wrapper
     # ================================================================
     def _run_sim(
-            self,
-            src_mask,
-            p_mat,
-            *,
-            full_wf: bool,
-            sensor_mask_override: Optional[np.ndarray] = None,
+        self,
+        src_mask,
+        p_mat,
+        *,
+        full_wf: bool,
+        sensor_mask_override: Optional[np.ndarray] = None,
     ):
         """Run kspaceFirstOrder2D with fresh grid & medium each time."""
         p_mat = np.ascontiguousarray(p_mat, dtype=np.float32)
@@ -561,7 +577,7 @@ class WaveOperator(Operator):
 
                 p_mat = np.zeros((self.src_mask.sum(), self.nt), np.float32)
                 for w, d, (x, y) in zip(
-                        self.enc_weights, self.enc_delays, self.tx_pos.T
+                    self.enc_weights, self.enc_delays, self.tx_pos.T
                 ):
                     ix, iy = self._xy2idx((x, y))
                     row = self._row_map[iy + ix * self.ny]
@@ -571,7 +587,7 @@ class WaveOperator(Operator):
                     seg_len = end - d
                     if seg_len > 0:
                         p_mat[row, d:end] = (
-                                w * self.pulse[0, :seg_len] / self._src_scale
+                            w * self.pulse[0, :seg_len] / self._src_scale
                         )
 
                 wf, rec_kw = self._run_sim(self.src_mask, p_mat, full_wf=full)

@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import shutil
 
 
 def find_repo_root(start: Path, marker: str = "src/chirpy") -> Path:
@@ -25,3 +26,31 @@ def detect_root() -> Path:
 
     # 4. Notebook / REPL → start from CWD
     return find_repo_root(Path.cwd())
+
+
+def resolve_kwave_binary() -> Path | None:
+    """
+    Try to locate a usable k-Wave binary.
+
+    Resolution order
+    ----------------
+    1) Env var `CHIRPY_KWAVE_BIN`
+    2) Any `kspaceFirstOrder-OMP` available on PATH
+    3) None (caller can still supply a path explicitly)
+
+    Note
+    ----
+    On macOS with the patched absorption build, set `CHIRPY_KWAVE_BIN` to
+    your compiled `kspaceFirstOrder-OMP` path (see README for build steps).
+    """
+    env = os.environ.get("CHIRPY_KWAVE_BIN")
+    if env:
+        p = Path(env).expanduser()
+        if p.is_file():
+            return p
+
+    which = shutil.which("kspaceFirstOrder-OMP")
+    if which:
+        return Path(which).expanduser()
+
+    return None

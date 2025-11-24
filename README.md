@@ -72,6 +72,12 @@ pre-commit install
 > Once built, point Chirpy’s `WaveOperator` to your compiled `kspaceFirstOrder-OMP` binary from this repository.  
 >
 > For more details, see: [elma16/k-wave-omp-darwin](https://github.com/elma16/k-wave-omp-darwin).
+>
+> **Usage inside Chirpy:** set an environment variable before running examples/tests:
+> ```bash
+> export CHIRPY_KWAVE_BIN=/path/to/k-wave-omp-darwin/kspaceFirstOrder-OMP
+> ```
+> or pass `binary_path=Path("/path/to/kspaceFirstOrder-OMP")` when constructing `WaveOperator`.
 
 ### Build the docs locally
 

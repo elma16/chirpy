@@ -11,7 +11,7 @@ from chirpy.optimization.function import NonlinearLS
 from chirpy.optimization.algorithm import GD, CG_Time, SGD
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
-from chirpy.utils.paths import detect_root
+from chirpy.utils.paths import resolve_kwave_binary
 from chirpy.utils.progress import Progress, ProgressConfig
 
 """
@@ -31,7 +31,7 @@ ROOT_DIR = Path.cwd()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
-KWAVE_DIR = None
+KWAVE_DIR = resolve_kwave_binary()
 
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
@@ -61,6 +61,7 @@ use_tqdm = True
 def compute_record_time(grid: ImageGrid2D, c_min: float, pad: float = 1.3) -> float:
     Lx = grid.extent[1] - grid.extent[0]
     return float(pad * Lx / c_min)
+
 
 def sgd_schedule(k: int, lr0: float) -> float:
     """
@@ -132,7 +133,7 @@ def main() -> None:
         solver = CG_Time(viz=viz, progress=progress)
     elif ALGO == "SGD":
         solver = SGD(
-            lr=50*ETA0,
+            lr=50 * ETA0,
             schedule_fn=sgd_schedule,
             momentum=0.9,
             viz=viz,

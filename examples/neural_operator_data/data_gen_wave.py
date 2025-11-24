@@ -45,6 +45,7 @@ from chirpy.utils.progress import Progress, ProgressConfig
 from chirpy.signals import GaussianModulatedPulse
 
 from chirpy.utils.dtft_wavefield import dtft_wavefield
+from chirpy.utils.paths import resolve_kwave_binary
 
 DAT_PATH = Path("data/NumerialBreastPhantoms/Neg_07_Left/MergedPhantom.DAT")
 
@@ -58,7 +59,7 @@ SAVE_DIR.mkdir(exist_ok=True, parents=True)
 use_gpu = False
 
 # Phantom source
-KWAVE_DIR = None
+KWAVE_DIR = resolve_kwave_binary()
 NX, NY, NZ = 616, 485, 719  # raw 3D (x,y,z) used to extract a single x-slice
 SLICE_AXIS_X_INDEX = NX // 2  # take the middle X-plane
 
@@ -79,10 +80,10 @@ xmax = 120e-3  # 240*240 mm field with nx=480/dx=0.5mm(fine) or nx=240/dx=1mm(co
 
 # Array & physics
 N_TX = 512
-downsample_step_tx = 50 # select every 50th TX element
-RADIUS_M = 110e-3 # 110 mm radius of the ring array
-F0 = 1e6 # 1 MHz center frequency of pulse
-C0_BG = 1500.0 # background sound speed
+downsample_step_tx = 50  # select every 50th TX element
+RADIUS_M = 110e-3  # 110 mm radius of the ring array
+F0 = 1e6  # 1 MHz center frequency of pulse
+C0_BG = 1500.0  # background sound speed
 
 # Time record policy
 RECORD_PAD = 1.3
@@ -112,7 +113,7 @@ def log(msg: str) -> None:
 
 
 def load_labels_slice(
-        dat_path: Path, shape_xyz: tuple[int, int, int], x_index: int
+    dat_path: Path, shape_xyz: tuple[int, int, int], x_index: int
 ) -> np.ndarray:
     """Load 3D uint8 labels in Fortran order and return one x-slice as (Ny, Nz)."""
     NX_, NY_, NZ_ = shape_xyz
@@ -161,7 +162,7 @@ def pad_to_square(arr: np.ndarray, target: int, bg: float = 1500.0) -> np.ndarra
 
 
 def compute_record_time(
-        grid: ImageGrid2D, c_min: float, pad: float = RECORD_PAD
+    grid: ImageGrid2D, c_min: float, pad: float = RECORD_PAD
 ) -> float:
     extent = grid.extent
     width = extent[1] - extent[0]
@@ -231,7 +232,7 @@ def main() -> None:
 
     # (5) Simulate incident fields (homogeneous c0)
     c_hom = np.full_like(c_true.array, C0_BG, dtype=np.float32)
-    _ = op.forward(model=c_hom, kind='c')
+    _ = op.forward(model=c_hom, kind="c")
     incident_fields_td = op.get_forward_fields()  # (Ntx, Nt, Ny, Nx)
 
     log("Transforming incident fields to frequency-domain...")
@@ -247,7 +248,9 @@ def main() -> None:
     # save incident fields (frequency-domain)
     log("Saving incident fields (frequency-domain)...")
     n_tx = incident_fields_fd.shape[2]
-    out_path = INC_DIR / f"inc_fields_fd_{nx_grid}x{ny_grid}_{dx_grid * 1e3:.1f}mm_{n_tx}.npz"
+    out_path = (
+        INC_DIR / f"inc_fields_fd_{nx_grid}x{ny_grid}_{dx_grid * 1e3:.1f}mm_{n_tx}.npz"
+    )
 
     np.savez(
         out_path,
@@ -259,7 +262,7 @@ def main() -> None:
     # (6) Simulate scattered fields
     log("Simulating scattered fields...")
     c_het = c_true.array
-    _ = op.forward(model=c_het, kind='c')
+    _ = op.forward(model=c_het, kind="c")
     total_fields_td = op.get_forward_fields()  # (Ntx, Nt, Ny, Nx)
 
     log("Transforming total fields to frequency-domain...")
@@ -267,8 +270,8 @@ def main() -> None:
         total_fields_td,
         dt=op.dt,
         freqs=freqs,
-    ) # (Ny, Nx, Ntx, Nfreqs)
-    scattered_fields_fd = total_fields_fd - incident_fields_fd # (Ny, Nx, Ntx, Nfreqs)
+    )  # (Ny, Nx, Ntx, Nfreqs)
+    scattered_fields_fd = total_fields_fd - incident_fields_fd  # (Ny, Nx, Ntx, Nfreqs)
 
     # quick view
     # ImageData(total_fields_fd[:, :, 0, 0], grid=grid).show(cmap="viridis", title="Total field")
@@ -277,7 +280,10 @@ def main() -> None:
     # save scattered fields (frequency-domain)
     log("Saving scattered fields (frequency-domain)...")
     n_tx = scattered_fields_fd.shape[2]
-    out_path = SCAT_DIR / f"scat_fields_fd_{nx_grid}x{ny_grid}_{dx_grid * 1e3:.1f}mm_{n_tx}.npz"
+    out_path = (
+        SCAT_DIR
+        / f"scat_fields_fd_{nx_grid}x{ny_grid}_{dx_grid * 1e3:.1f}mm_{n_tx}.npz"
+    )
     np.savez(
         out_path,
         scattered_fields=scattered_fields_fd,
@@ -294,28 +300,24 @@ def main() -> None:
 
     np.savez(
         NEURAL_NPZ,
-        incident_fields_fd=incident_fields_fd, # (Ny, Nx, N_tx, N_freqs)
-        scattered_fields_fd=scattered_fields_fd, # (Ny, Nx, N_tx, N_freqs)
+        incident_fields_fd=incident_fields_fd,  # (Ny, Nx, N_tx, N_freqs)
+        scattered_fields_fd=scattered_fields_fd,  # (Ny, Nx, N_tx, N_freqs)
         freqs=freqs,
-
         # geometry
         grid_nx=grid.nx,
         grid_ny=grid.ny,
         grid_dx=grid.spacing[0],
         grid_dy=grid.spacing[1],
         grid_extent=np.array(grid.extent),
-
         # tx-rx metadata
         tx_indices=geom_config.tx_keep,
         rx_indices=geom_config.rx_keep,
         tx_positions=tx_positions,
         tx_grid_x=tx_x_idx,
         tx_grid_y=tx_y_idx,
-
         # medium
         c_true=c_true.array,
         c_hom=c_hom,
-
         # time-domain info
         dt=op.dt,
         time_axis=time_axis,

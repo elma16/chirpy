@@ -203,7 +203,7 @@ class LowpassFilter(BaseProcessor):
         f_cut_req = (
             self._f_cut_abs
             if self._f_cut_abs is not None
-            else (self.f0 * (1.0 + self.frac_bw))
+            else (self.f0 * (1.0 + self.frac_bw / 2.0))
         )
         f_cut = self.resolve_fcut(dt)
 

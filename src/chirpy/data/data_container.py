@@ -20,8 +20,9 @@ class DataContainer:
     # ------------------------------------------------------------------
     def clone(self):
         """Create a deep copy, preserving subclass type and metadata."""
+        arr = None if self.array is None else self.array.copy()
         return self.__class__(
-            self.array.copy(),
+            arr,
             grid=copy.deepcopy(self.grid),
             tx_array=copy.deepcopy(self.tx_array),
             **copy.deepcopy(self.ctx),

@@ -2,12 +2,12 @@ import numpy as np
 from scipy.io import loadmat
 from pathlib import Path
 
-from chirpy.geometry import ImageGrid2D, TransducerArray2D,GeometryConfigurator
+from chirpy.geometry import ImageGrid2D, TransducerArray2D, GeometryConfigurator
 from chirpy.data import AcquisitionData
 from chirpy.data.image_data import ImageData
 from chirpy.optimization.operator import WaveOperator
 from chirpy.signals import GaussianModulatedPulse
-from chirpy.utils.paths import detect_root
+from chirpy.utils.paths import resolve_kwave_binary
 from chirpy.utils.progress import Progress, ProgressConfig
 
 """
@@ -27,7 +27,7 @@ ROOT_DIR = Path.cwd()
 DATA_DIR = Path(ROOT_DIR / "data")
 SAVE_DIR = Path(ROOT_DIR / "outputs")
 SAVE_DIR.mkdir(exist_ok=True, parents=True)
-KWAVE_DIR = None
+KWAVE_DIR = resolve_kwave_binary()
 
 progress = Progress(ProgressConfig(enabled=True, backend="tqdm", ncols=90))
 
@@ -63,7 +63,6 @@ def main() -> None:
 
     img_true = ImageData(model_raw).downsample_to(new_grid=img_grid)
     c_true = img_true.array.astype(np.float32)
-
 
     # 2) Record time and reference speed
     c_min = float(c_true.min())

@@ -40,15 +40,15 @@ class AcquisitionData(DataContainer):
 
     # ------------------------------------------------------------------
     def __init__(
-            self,
-            array,
-            *,
-            tx_array: TransducerArray2D | None = None,
-            grid: ImageGrid2D | None = None,
-            time: np.ndarray | None = None,
-            freqs: np.ndarray | None = None,
-            c0: float = 1500.0,  # sound speed
-            **ctx,
+        self,
+        array,
+        *,
+        tx_array: TransducerArray2D | None = None,
+        grid: ImageGrid2D | None = None,
+        time: np.ndarray | None = None,
+        freqs: np.ndarray | None = None,
+        c0: float = 1500.0,  # sound speed
+        **ctx,
     ):
         if array is not None and (time is None and freqs is None):
             raise ValueError("Specify at least one of 'time' or 'freqs'")
@@ -191,7 +191,9 @@ class AcquisitionData(DataContainer):
             else None,
             "is_tx": self.tx_array.is_tx if self.tx_array is not None else None,
             "is_rx": self.tx_array.is_rx if self.tx_array is not None else None,
-            "meta": np.array({"version": "1.0", "mode": self.mode}, dtype=object),
+            # store simple scalars to remain compatible with allow_pickle=False
+            "meta_version": np.array("1.0"),
+            "meta_mode": np.array(self.mode),
             # store ctx as plain unicode scalar (NumPy 2.0+: use np.str_)
             "ctx_json": np.array(
                 json.dumps(self.ctx, ensure_ascii=False), dtype=np.str_
@@ -226,6 +228,7 @@ class AcquisitionData(DataContainer):
         - If `meta['mode']` is 'time', we expect 'time' to be present; if 'freqs', expect 'freqs'.
         """
         path = Path(path)
+        meta_mode = None
         with np.load(path, allow_pickle=False) as z:
             array = z["array"] if "array" in z.files else None
 
@@ -276,9 +279,14 @@ class AcquisitionData(DataContainer):
                     if getattr(f, "dtype", None) is not None and f.dtype.hasobject
                     else f
                 )
+            if "meta_mode" in z.files:
+                try:
+                    meta_mode = str(z["meta_mode"])
+                except Exception:
+                    meta_mode = None
 
         # construct AcquisitionData
-        return cls(
+        obj = cls(
             array=array,
             tx_array=tx_array,
             grid=grid,
@@ -286,6 +294,9 @@ class AcquisitionData(DataContainer):
             freqs=freqs,
             **ctx,
         )
+        if meta_mode is not None:
+            obj.mode = meta_mode
+        return obj
 
     def fft(self) -> "AcquisitionData":
         """
@@ -411,7 +422,7 @@ class AcquisitionData(DataContainer):
         )
 
     def show_trace(
-            self, tx: int, rx: int, *, xunit="s", ax=None, figure_size=None, **line_kw
+        self, tx: int, rx: int, *, xunit="s", ax=None, figure_size=None, **line_kw
     ):
         """
         Plot a single Tx–Rx waveform (time domain).
@@ -470,7 +481,7 @@ class AcquisitionData(DataContainer):
         return ax
 
     def show_traces(
-            self, tx: int, rx_list=None, *, norm=False, ax=None, figure_size=None, **plot_kw
+        self, tx: int, rx_list=None, *, norm=False, ax=None, figure_size=None, **plot_kw
     ):
         """
         Overlay multiple Rx waveforms for a given Tx (time domain).
@@ -525,14 +536,14 @@ class AcquisitionData(DataContainer):
         return ax
 
     def show_sinogram(
-            self,
-            *,
-            t_idx=None,
-            t_val=None,
-            mode="max",
-            ax=None,
-            figure_size=None,
-            **imshow_kw,
+        self,
+        *,
+        t_idx=None,
+        t_val=None,
+        mode="max",
+        ax=None,
+        figure_size=None,
+        **imshow_kw,
     ):
         """
         Visualize an intensity map over (Tx, Rx) (a.k.a. sinogram).
@@ -591,7 +602,7 @@ class AcquisitionData(DataContainer):
         return ax
 
     def show_spectrum(
-            self, tx: int, rx: int, *, xunit="Hz", ax=None, figure_size=None, **line_kw
+        self, tx: int, rx: int, *, xunit="Hz", ax=None, figure_size=None, **line_kw
     ):
         """
         Plot the magnitude spectrum for a single Tx–Rx pair (frequency domain).
