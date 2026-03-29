@@ -6,7 +6,6 @@ from chirpy.geometry import GeometryConfigurator
 from chirpy.processors import (
     GaussianTimeWindow,
     DTFT,
-    AcceptanceMask,
     DownSample,
     MagnitudeOutlierFilter,
     PhaseScreenCorrection,
@@ -44,7 +43,7 @@ def test_full_processor_pipeline_smoke(tiny_grid, ring8, c0):
             GaussianTimeWindow(pre_pct=5.0, post_pct=np.inf, c0=c0, geom_config=geom),
             DTFT(freqs),
             PhaseScreenCorrection(geom_config=geom, sign=-1),
-            DownSample(geom_config=geom, step=2), # change acq data
+            DownSample(geom_config=geom, step=2),  # change acq data
             MagnitudeOutlierFilter(geom_config=geom, threshold=0.95),
         ],
         verbose=False,

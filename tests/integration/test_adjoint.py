@@ -25,7 +25,12 @@ def _pair_array(ring):
 
 
 def test_adjoint_backprop_nontrivial_and_real(
-    kwave_bin, tiny_grid, gaussian_pulse, record_time, c0
+    installed_kwave_cpp_binary,
+    no_custom_kwave_binary,
+    tiny_grid,
+    gaussian_pulse,
+    record_time,
+    c0,
 ):
     from chirpy.data import AcquisitionData
     from chirpy.optimization.operator.wave_operator import WaveOperator
@@ -52,7 +57,6 @@ def test_adjoint_backprop_nontrivial_and_real(
         pml_alpha=8.0,
         use_gpu=False,
         verbose=False,
-        binary_path=kwave_bin,
     )
 
     d_true = op.forward(m_true, kind="c")

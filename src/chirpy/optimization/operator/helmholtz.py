@@ -59,7 +59,9 @@ class HelmholtzOperator(Operator):
             self._freq = float(freq)
         else:
             if f_idx is None or data is None or not hasattr(data, "freqs"):
-                raise ValueError("Either `freq` must be provided, or `data` with `freqs` and `f_idx`.")
+                raise ValueError(
+                    "Either `freq` must be provided, or `data` with `freqs` and `f_idx`."
+                )
             self._freq = float(data.freqs[f_idx])
 
         self._sign = int(sign_conv)
@@ -68,9 +70,9 @@ class HelmholtzOperator(Operator):
 
         # --- geometry / indexing via GeometryConfigurator ------------- #
         # Element indices after TX/RX selection
-        tx_keep = self._geom.get_tx_elem_indices()          # (Tx,)
-        rx_lin_idx = self._geom.get_rx_lin_idx()            # (Rx,)
-        mask = self._geom.get_elem_mask()                   # (Tx, Rx)
+        tx_keep = self._geom.get_tx_elem_indices()  # (Tx,)
+        rx_lin_idx = self._geom.get_rx_lin_idx()  # (Rx,)
+        mask = self._geom.get_elem_mask()  # (Tx, Rx)
 
         tx_roles = self._geom.get_tx_role_indices()  # role indices for array axis 0
         rx_roles = self._geom.get_rx_role_indices()  # role indices for array axis 1
@@ -80,9 +82,7 @@ class HelmholtzOperator(Operator):
 
         # Observation data (optional)
         if data is not None and data.array is not None and f_idx is not None:
-            rec_f = self._resolve_observed_data(
-                data.array, f_idx, tx_roles, rx_roles
-            )
+            rec_f = self._resolve_observed_data(data.array, f_idx, tx_roles, rx_roles)
         else:
             rec_f = None
 
@@ -254,10 +254,10 @@ class HelmholtzOperator(Operator):
     # ------------------------------------------------------------------ #
     @staticmethod
     def _resolve_observed_data(
-            array: np.ndarray | None,
-            f_idx: int,
-            tx_idx: np.ndarray,
-            rx_idx: np.ndarray,
+        array: np.ndarray | None,
+        f_idx: int,
+        tx_idx: np.ndarray,
+        rx_idx: np.ndarray,
     ) -> np.ndarray | None:
         if array is None:
             return None

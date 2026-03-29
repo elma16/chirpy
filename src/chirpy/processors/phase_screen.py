@@ -4,8 +4,6 @@ import numpy as np
 
 from chirpy.processors.base import BaseProcessor
 from chirpy.data import AcquisitionData
-from chirpy.geometry.image_grid_2D import ImageGrid2D
-from chirpy.geometry.transducer_array_2D import TransducerArray2D
 from chirpy.geometry import GeometryConfigurator
 
 
@@ -13,7 +11,7 @@ class PhaseScreenCorrection(BaseProcessor):
     """
     Apply phase-screen correction to acquisition data.
 
-    The correction compensates the geometric phase error introduced by 
+    The correction compensates the geometric phase error introduced by
     snapping transducer element positions to the reconstruction grid.
 
     For transmitter s and receiver r at frequency f:

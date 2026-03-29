@@ -5,7 +5,12 @@ pytestmark = [pytest.mark.slow, pytest.mark.kwave]
 
 
 def test_source_encoding_k_sum_vs_single(
-    kwave_bin, tiny_grid, gaussian_pulse, record_time, c0
+    installed_kwave_cpp_binary,
+    no_custom_kwave_binary,
+    tiny_grid,
+    gaussian_pulse,
+    record_time,
+    c0,
 ):
     from chirpy.geometry import TransducerArray2D
     from chirpy.data import AcquisitionData
@@ -38,7 +43,6 @@ def test_source_encoding_k_sum_vs_single(
         pml_alpha=8.0,
         verbose=False,
         use_gpu=False,
-        binary_path=kwave_bin,
     )
     d_obs = op_true.forward(m_true, kind="c")
 
@@ -61,7 +65,6 @@ def test_source_encoding_k_sum_vs_single(
         pml_alpha=8.0,
         verbose=False,
         use_gpu=False,
-        binary_path=kwave_bin,
     )
 
     # K=1 vs K>1 : gradient must scale ~ linearly (sum, not average)

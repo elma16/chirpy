@@ -10,7 +10,6 @@ from chirpy.processors import (
     DTFT,
     PhaseScreenCorrection,
     DownSample,
-    AcceptanceMask,
     MagnitudeOutlierFilter,
     Pipeline,
 )
@@ -19,7 +18,6 @@ from chirpy.optimization.algorithm.cg import CG
 from chirpy.optimization.operator.helmholtz import HelmholtzOperator
 from chirpy.optimization.gradient.adjoint_helmholtz import HelmholtzAdjointGrad
 from chirpy.utils.visualizer_multi_mode import Visualizer
-from chirpy.utils.paths import detect_root
 from chirpy.utils.progress import Progress, ProgressConfig
 
 """
@@ -130,10 +128,12 @@ def main() -> None:
         )
         grad = HelmholtzAdjointGrad(
             op,
-            deriv_fn=lambda m, o: 8
-            * np.pi**2
-            * o.get_field("freq") ** 2
-            * (o.get_field("PML") / o.get_field("V")),
+            deriv_fn=lambda m, o: (
+                8
+                * np.pi**2
+                * o.get_field("freq") ** 2
+                * (o.get_field("PML") / o.get_field("V"))
+            ),
         )
         fun = NonlinearLS(op, grad_eval=grad)
 

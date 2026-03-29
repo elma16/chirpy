@@ -34,7 +34,6 @@ def dtft_wavefield(
         raise ValueError("`freqs` must be 1-D.")
 
     n_tx, n_t, n_y, n_x = wf_time.shape
-    n_f = freqs.size
 
     # time axis in seconds
     t = np.arange(n_t, dtype=float) * dt  # (n_t,)

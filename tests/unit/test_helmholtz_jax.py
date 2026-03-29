@@ -12,9 +12,10 @@ Covers:
 from __future__ import annotations
 
 import numpy as np
-import jax
-import jax.numpy as jnp
 import pytest
+
+jax = pytest.importorskip("jax", reason="requires the optional jax_backend extra")
+import jax.numpy as jnp
 
 # Run tests in x64 to match SciPy-comparison numerics
 jax.config.update("jax_enable_x64", True)

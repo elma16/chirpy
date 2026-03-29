@@ -66,9 +66,7 @@ class GaussianTimeWindow(BaseProcessor):
             raise ValueError("AcquisitionData missing array.")
         if data.tx_array is None:
             if self.geom_config is None:
-                raise ValueError(
-                    "tx_array is required for TimeWindow."
-                )
+                raise ValueError("tx_array is required for TimeWindow.")
             tx_array = self.geom_config.tx_array
         else:
             tx_array = data.tx_array

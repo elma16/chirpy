@@ -117,9 +117,9 @@ print("\n" + "=" * 70)
 print("TEST CONFIGURATION")
 print("=" * 70)
 print(f"• Grid: {PAD_TO}x{PAD_TO}")
-print(f"• dx = dy = {DX*1e3:.1f} mm")
+print(f"• dx = dy = {DX * 1e3:.1f} mm")
 print(f"• TX count: {N_TX}")
-print(f"• Frequencies: {FREQS/1e6} MHz")
+print(f"• Frequencies: {FREQS / 1e6} MHz")
 print(f"• Original: {ORIGINAL_LABEL}")
 print(f"• JAX: {JAX_LABEL}")
 
@@ -241,7 +241,7 @@ vel_inc = np.full_like(c_true, C0_BG)
 vel_het = c_true
 
 for f_idx, freq in enumerate(FREQS):
-    print(f"\n--- Frequency {freq/1e6:.3f} MHz ---")
+    print(f"\n--- Frequency {freq / 1e6:.3f} MHz ---")
 
     # Original:
     ti, ts, w_inc = run_original(f_idx, slow_inc)
@@ -316,7 +316,7 @@ for f_idx, freq in enumerate(FREQS):
     all_ok = all_ok and passed
 
     status = "PASS" if passed else "FAIL"
-    print(f"\nFreq {freq/1e6:.3f} MHz: {status}")
+    print(f"\nFreq {freq / 1e6:.3f} MHz: {status}")
     print(f"  Incident rel={r_inc:.2e}, abs={a_inc:.2e}")
     print(f"  Scatter  rel={r_sc:.2e}, abs={a_sc:.2e}")
 
@@ -334,5 +334,5 @@ jax_times = [r["t_total"] for r in results_jax]
 
 print(f"\nOriginal total: {sum(orig_times):.3f}s")
 print(f"JAX total:      {sum(jax_times):.3f}s")
-print(f"Speedup:        {(sum(orig_times)/(sum(jax_times)+1e-15)):.2f}x")
+print(f"Speedup:        {(sum(orig_times) / (sum(jax_times) + 1e-15)):.2f}x")
 print("=" * 70)

@@ -10,7 +10,6 @@ from chirpy.optimization.function.least_squares import NonlinearLS
 from chirpy.optimization.algorithm import GD, CG_Time, SGD
 from chirpy.utils.visualizer_multi_mode import Visualizer
 from chirpy.signals import GaussianModulatedPulse
-from chirpy.utils.paths import detect_root
 from chirpy.utils.progress import Progress, ProgressConfig
 
 """
@@ -138,8 +137,9 @@ def main() -> None:
             progress=progress,
         )
     elif ALGO == "SGD":
+
         def sgd_schedule(k: int, lr0: float) -> float:
-            return lr0 * (0.95**(k // 5))
+            return lr0 * (0.95 ** (k // 5))
 
         solver = SGD(
             lr=50 * ETA0,

@@ -21,7 +21,9 @@ class MagnitudeOutlierFilter(BaseProcessor):
     restricted to the channels allowed by GeometryConfigurator.
     """
 
-    def __init__(self, geom_config: GeometryConfigurator, threshold: float = 0.99) -> None:
+    def __init__(
+        self, geom_config: GeometryConfigurator, threshold: float = 0.99
+    ) -> None:
         if not (0.0 < threshold <= 1.0):
             raise ValueError("`threshold` must be in (0,1].")
         self._keep = threshold

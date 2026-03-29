@@ -3,4 +3,4 @@ from .base import Geometry
 from .image_grid_2D import ImageGrid2D
 from .GeometryConfigurator import GeometryConfigurator
 
-__all__ = ["TransducerArray2D", "Geometry", "ImageGrid2D","GeometryConfigurator"]
+__all__ = ["TransducerArray2D", "Geometry", "ImageGrid2D", "GeometryConfigurator"]

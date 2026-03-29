@@ -108,7 +108,7 @@ def log(msg: str) -> None:
 
 
 def load_labels_slice(
-        dat_path: Path, shape_xyz: tuple[int, int, int], x_index: int
+    dat_path: Path, shape_xyz: tuple[int, int, int], x_index: int
 ) -> np.ndarray:
     """Load 3D uint8 labels in Fortran order and return one x-slice as (Ny, Nz)."""
     NX_, NY_, NZ_ = shape_xyz
@@ -249,9 +249,7 @@ def main() -> None:
     if PACK_TENSORS:
         log("Loading per-frequency files and packing full tensors...")
 
-        incident_fields_fd = np.zeros(
-            (n_y, n_x, n_tx, n_freqs), dtype=np.complex128
-        )
+        incident_fields_fd = np.zeros((n_y, n_x, n_tx, n_freqs), dtype=np.complex128)
         scattered_fields_fd = np.zeros_like(incident_fields_fd)
 
         for k, f in enumerate(freqs):
@@ -302,21 +300,18 @@ def main() -> None:
             incident_fields_fd=incident_fields_fd,  # (Ny, Nx, N_tx, N_freqs)
             scattered_fields_fd=scattered_fields_fd,  # (Ny, Nx, N_tx, N_freqs)
             freqs=freqs,
-
             # geometry
             grid_nx=grid.nx,
             grid_ny=grid.ny,
             grid_dx=grid.spacing[0],
             grid_dy=grid.spacing[1],
             grid_extent=np.array(grid.extent),
-
             # tx-rx metadata
             tx_indices=geom_config.tx_keep,
             rx_indices=geom_config.rx_keep,
             tx_positions=tx_positions,
             tx_grid_x=tx_x_idx,
             tx_grid_y=tx_y_idx,
-
             # medium
             c_true=c_true.array,
             c_hom=np.full_like(c_true.array, C0_BG, dtype=np.float32),

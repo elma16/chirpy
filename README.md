@@ -8,7 +8,7 @@ This repository contains the code accompanying the project paper "A Flexible Pyt
 
 This project is a fork and extension of the original work by Wei Liao ([original repository](https://github.com/weiliao001211/PHAS0077-Research-Project)). 
 
-For time domain simulation, [k-Wave-python](https://github.com/waltsims/k-wave-python) is used. This has support for CPU and GPU hardware. For frequency domain simulation on a GPU [CuPy](https://cupy.dev/) is used. 
+For time domain simulation, [k-Wave-python](https://github.com/waltsims/k-wave-python) is used. Chirpy targets the unified `kspaceFirstOrder()` API introduced in `k-Wave-python>=0.6.0`, defaulting to the C++ backend while also supporting the NumPy/CuPy solver. For frequency domain simulation on a GPU [CuPy](https://cupy.dev/) is used.
 
 ## Installation
 
@@ -39,6 +39,10 @@ pip install ".[gpu]"
 
 **Note**: Check the [CuPy installation guide](https://docs.cupy.dev/en/stable/install.html) to verify hardware compatibility before installing GPU dependencies.
 
+For time-domain simulations, `WaveOperator` defaults to `kwave_backend="cpp"`. To use the new CuPy-backed k-Wave Python solver on GPU, construct the operator with `kwave_backend="python", use_gpu=True`. Note also that from preliminary use, the CuPy version of k-wave-python is faster than the GPU C++ version only for small to moderate sized grids (64^2 - 128^2). Your mileage may vary.
+
+On macOS, the upstream packaged C++ backend can currently fail on a fresh install with a missing `libhdf5.310.dylib`; see [waltsims/k-wave-python#661](https://github.com/waltsims/k-wave-python/issues/661). Chirpy does not try to patch Homebrew or create HDF5 symlinks automatically. If you hit that error, use `kwave_backend="python"` or provide a working custom C++ binary via `binary_path` / `CHIRPY_KWAVE_BIN`.
+
 ### JAX Helmholtz backend
 
 To use the JAX-based Helmholtz solver (`chirpy.optimization.operator.helmholtz_jax`):
@@ -59,6 +63,7 @@ pre-commit install
 > **⚠️ macOS Users — Important Note on Absorption Support**
 >
 > At present, **absorption support in `k-Wave-python` is broken on macOS** due to [issues](https://github.com/waltsims/k-wave-python/issues/470) in the OpenMP backend used by the default build.  
+> Separately, the stock packaged C++ backend may also fail to start on macOS because of the HDF5 runtime mismatch tracked in [issue #661](https://github.com/waltsims/k-wave-python/issues/661).
 >
 > If you are running Chirpy on a Mac and require absorption modeling, you must additionally build and use the fixed C++ backend from the fork below:
 >
@@ -69,15 +74,22 @@ pre-commit install
 > make -j"$(sysctl -n hw.logicalcpu)"
 > ```
 >
-> Once built, point Chirpy’s `WaveOperator` to your compiled `kspaceFirstOrder-OMP` binary from this repository.  
+> Once built, point Chirpy’s `WaveOperator` to your compiled `kspaceFirstOrder-OMP` binary from this repository. This custom-binary escape hatch is only supported when `kwave_backend="cpp"`.
 >
 > For more details, see: [elma16/k-wave-omp-darwin](https://github.com/elma16/k-wave-omp-darwin).
+>
+> Chirpy’s test suite treats the HDF5 mismatch from issue #661 as an upstream environment problem. When that exact macOS load failure is detected, the C++-backend integration tests are skipped instead of failing the whole suite.
 >
 > **Usage inside Chirpy:** set an environment variable before running examples/tests:
 > ```bash
 > export CHIRPY_KWAVE_BIN=/path/to/k-wave-omp-darwin/kspaceFirstOrder-OMP
 > ```
 > or pass `binary_path=Path("/path/to/kspaceFirstOrder-OMP")` when constructing `WaveOperator`.
+>
+> Example:
+> ```python
+> op = WaveOperator(..., kwave_backend="cpp", binary_path=Path("/path/to/kspaceFirstOrder-OMP"))
+> ```
 
 ### Build the docs locally
 

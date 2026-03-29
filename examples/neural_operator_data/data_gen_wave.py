@@ -30,7 +30,6 @@ Outputs
         outputs/neural_operator_data_wave_gen/neural_operator_data/neural_operator_training_data.npz
 """
 
-
 from __future__ import annotations
 
 from pathlib import Path
