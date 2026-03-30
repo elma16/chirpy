@@ -29,8 +29,6 @@ def _pair_array(ring):
 
 
 def test_forward_shapes_and_monotonicity(
-    installed_kwave_cpp_binary,
-    no_custom_kwave_binary,
     tiny_grid,
     gaussian_pulse,
     record_time,
@@ -61,6 +59,7 @@ def test_forward_shapes_and_monotonicity(
         pml_alpha=8.0,
         use_gpu=False,
         verbose=False,
+        kwave_backend="python",
     )
 
     F = op.forward(model_true, kind="c")

@@ -5,8 +5,6 @@ pytestmark = [pytest.mark.slow, pytest.mark.kwave]
 
 
 def test_single_shot_gradient_reasonable_range(
-    installed_kwave_cpp_binary,
-    no_custom_kwave_binary,
     tiny_grid,
     gaussian_pulse,
     record_time,
@@ -39,6 +37,7 @@ def test_single_shot_gradient_reasonable_range(
         pml_alpha=8.0,
         verbose=False,
         use_gpu=False,
+        kwave_backend="python",
     )
 
     d = op.forward(m_true, kind="c")

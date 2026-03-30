@@ -25,8 +25,6 @@ def _pair_array(ring):
 
 
 def test_adjoint_backprop_nontrivial_and_real(
-    installed_kwave_cpp_binary,
-    no_custom_kwave_binary,
     tiny_grid,
     gaussian_pulse,
     record_time,
@@ -57,6 +55,7 @@ def test_adjoint_backprop_nontrivial_and_real(
         pml_alpha=8.0,
         use_gpu=False,
         verbose=False,
+        kwave_backend="python",
     )
 
     d_true = op.forward(m_true, kind="c")

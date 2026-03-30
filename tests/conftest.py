@@ -17,6 +17,27 @@ if str(REPO_SRC) not in sys.path:
 from chirpy.utils.paths import resolve_kwave_binary
 
 
+def _explicit_custom_kwave_binary() -> Path | None:
+    env_value = os.environ.get("CHIRPY_KWAVE_BIN")
+    if not env_value:
+        return None
+    candidate = Path(env_value).expanduser()
+    return candidate if candidate.is_file() else None
+
+
+def _preferred_kwave_binary() -> Path | None:
+    explicit = _explicit_custom_kwave_binary()
+    if explicit is not None:
+        return explicit
+
+    resolved = resolve_kwave_binary()
+    if resolved is None:
+        return None
+
+    candidate = Path(resolved).expanduser()
+    return candidate if candidate.is_file() else None
+
+
 def _kwave_binary_startup_issue(binary_path: Path) -> str | None:
     try:
         proc = subprocess.run(
@@ -36,19 +57,25 @@ def _kwave_binary_startup_issue(binary_path: Path) -> str | None:
         return (
             "skipping k-Wave C++ integration tests on macOS because the binary "
             "hits the known k-wave-python HDF5 mismatch "
-            "(issue #661: missing libhdf5.310.dylib)"
+            '(issue #661: missing libhdf5.310.dylib; use kwave_backend="python" '
+            "or set CHIRPY_KWAVE_BIN to a working custom binary, see README)"
         )
     return None
 
 
 @pytest.fixture(scope="session")
 def kwave_bin():
-    p = os.environ.get("CHIRPY_KWAVE_BIN") or resolve_kwave_binary()
-    if not p:
-        pytest.skip("CHIRPY_KWAVE_BIN not set; skipping k-Wave integration tests")
-    p = Path(p)
+    p = _preferred_kwave_binary()
+    if p is None:
+        pytest.skip(
+            "No custom k-Wave binary found; set CHIRPY_KWAVE_BIN or put "
+            "kspaceFirstOrder-OMP on PATH"
+        )
     if not p.is_file():
-        pytest.skip("CHIRPY_KWAVE_BIN not set; skipping k-Wave integration tests")
+        pytest.skip(
+            "Resolved k-Wave binary is not a file; set CHIRPY_KWAVE_BIN or put "
+            "kspaceFirstOrder-OMP on PATH"
+        )
     # Always work from a writable temp copy to avoid chmod issues in kwave executor
     tmp_dir = Path(tempfile.mkdtemp(prefix="chirpy_kwave_"))
     tmp_bin = tmp_dir / p.name
@@ -58,24 +85,6 @@ def kwave_bin():
     if startup_issue:
         pytest.skip(startup_issue)
     return tmp_bin
-
-
-@pytest.fixture
-def no_custom_kwave_binary(monkeypatch):
-    monkeypatch.delenv("CHIRPY_KWAVE_BIN", raising=False)
-
-
-@pytest.fixture(scope="session")
-def installed_kwave_cpp_binary():
-    kwave = pytest.importorskip("kwave")
-    binary_name = "kspaceFirstOrder-OMP.exe" if sys.platform.startswith("win") else "kspaceFirstOrder-OMP"
-    binary_path = Path(kwave.BINARY_PATH) / binary_name
-    if not binary_path.is_file():
-        pytest.skip(f"Installed k-Wave C++ binary not found at {binary_path}")
-    startup_issue = _kwave_binary_startup_issue(binary_path)
-    if startup_issue:
-        pytest.skip(startup_issue)
-    return binary_path
 
 
 @pytest.fixture(scope="session")

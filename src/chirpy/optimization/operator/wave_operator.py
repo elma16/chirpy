@@ -13,6 +13,15 @@ import numpy as np
 from pathlib import Path
 from chirpy.data import AcquisitionData
 from chirpy.optimization.operator.base import Operator
+from chirpy.optimization.operator._kwave_order import (
+    kwave_output_order,
+    kwave_source_order,
+    linear_index_2d,
+    mask_linear_indices,
+    reorder_rows_for_mask,
+    reshape_sensor_rows_to_wavefield,
+    resolve_kwave_version,
+)
 from chirpy.signals import Pulse, GaussianModulatedPulse
 from chirpy.utils.progress import Progress, ProgressConfig
 from chirpy.geometry import GeometryConfigurator
@@ -22,7 +31,31 @@ from kwave.kmedium import kWaveMedium
 from kwave.ksource import kSource
 from kwave.ksensor import kSensor
 from kwave.kspaceFirstOrder import kspaceFirstOrder
+from kwave.kspaceFirstOrder2D import kspace_first_order_2d_gpu, kspaceFirstOrder2DC
+from kwave.options.simulation_execution_options import SimulationExecutionOptions
+from kwave.options.simulation_options import SimulationOptions
 import kwave
+
+
+def _patch_cpp_simulation_stale_hdf5():
+    """
+    Work around k-wave-python CppSimulation._write_hdf5 not removing stale
+    HDF5 files before writing, causing "name already exists" errors when the
+    same temp path is reused.
+    """
+    from kwave.solvers.cpp_simulation import CppSimulation
+
+    _orig_write = CppSimulation._write_hdf5
+
+    def _patched_write(self, filepath):
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        _orig_write(self, filepath)
+
+    CppSimulation._write_hdf5 = _patched_write
+
+
+_patch_cpp_simulation_stale_hdf5()
 
 
 # =========================================================================
@@ -113,10 +146,10 @@ class WaveOperator(Operator):
         (2, n_tx) coordinates of active transmitters.
     src_mask : np.ndarray (ny, nx) bool
     rx_mask : np.ndarray (ny, nx) bool
-        k-Wave masks for TX and RX on the grid (Fortran/column-major indexing).
+        k-Wave masks for TX and RX on the grid.
     idx_elem2kw : np.ndarray
     idx_kw2elem : np.ndarray
-        Index maps between element order and k-Wave order (Rx dimension).
+        Index maps between element order and the unified k-Wave sensor order.
     use_encoding : bool
     drop_self_rx : bool
     enc_weights : np.ndarray | None
@@ -187,8 +220,10 @@ class WaveOperator(Operator):
         self._use_custom_cpp_binary = (
             self.kwave_backend == "cpp" and self.binary_path is not None
         )
+        self._use_legacy_cpp_path = self._use_custom_cpp_binary
         self._custom_binary_tmpdir: tempfile.TemporaryDirectory | None = None
         self._custom_binary_root: Path | None = None
+        self._staged_binary_path: Path | None = None
         if self._use_custom_cpp_binary:
             self._custom_binary_tmpdir = tempfile.TemporaryDirectory(
                 prefix="chirpy_kwave_bin_"
@@ -197,6 +232,23 @@ class WaveOperator(Operator):
             staged_binary = self._custom_binary_root / self._kwave_cpp_binary_name()
             shutil.copy2(self.binary_path, staged_binary)
             staged_binary.chmod(staged_binary.stat().st_mode | 0o755)
+            self._staged_binary_path = staged_binary
+
+        self._kwave_version = resolve_kwave_version(kwave)
+        if self._use_legacy_cpp_path:
+            # The macOS custom binary is built against the legacy HDF5 schema
+            # used by kspaceFirstOrder2DC and still expects F-order masks/rows.
+            self._kwave_output_order = "F"
+            self._kwave_source_order = "F"
+        else:
+            self._kwave_output_order = kwave_output_order(
+                self._kwave_version, docstring=getattr(kspaceFirstOrder, "__doc__", None)
+            )
+            self._kwave_source_order = kwave_source_order(
+                self._kwave_version,
+                backend=self.kwave_backend,
+                docstring=getattr(kspaceFirstOrder, "__doc__", None),
+            )
 
         if geom_config is None:
             if data is None:
@@ -261,6 +313,30 @@ class WaveOperator(Operator):
         self._pml_inside = bool(pml_inside)
         self._scale_source_terms = bool(scale_source_terms)
         self._src_scale = 1.0
+        self.sim_opts: SimulationOptions | None = None
+        self.exec_opts: SimulationExecutionOptions | None = None
+        self._k_solver = None
+        if self._use_legacy_cpp_path:
+            self.sim_opts = SimulationOptions(
+                save_to_disk=True,
+                pml_size=[self._pml_size, self._pml_size],
+                pml_x_size=self._pml_size,
+                pml_y_size=self._pml_size,
+                pml_x_alpha=self._pml_alpha,
+                pml_y_alpha=self._pml_alpha,
+                scale_source_terms=bool(scale_source_terms),
+                data_cast="single",
+                pml_inside=self._pml_inside,
+            )
+            self.exec_opts = SimulationExecutionOptions(
+                is_gpu_simulation=use_gpu,
+                binary_path=self._staged_binary_path,
+                show_sim_log=bool(verbose),
+                verbose_level=2 if verbose else 0,
+            )
+            self._k_solver = (
+                kspace_first_order_2d_gpu if use_gpu else kspaceFirstOrder2DC
+            )
         # ---------- 5. geometry --------------------------------------
         # Active TX elements and positions (element index space)
         self.tx_elem_indices = geom.get_tx_elem_indices()  # element indices
@@ -272,12 +348,16 @@ class WaveOperator(Operator):
 
         self.src_mask = src_mask_grid
         self.rx_mask = rx_mask_grid
-        lin_idx = np.flatnonzero(self.src_mask.flatten(order="F"))
-        self._rx_lin_idx_full = np.flatnonzero(self.rx_mask.flatten(order="F"))
+        lin_idx = mask_linear_indices(
+            self.src_mask, order=self._kwave_output_order
+        )
+        self._rx_lin_idx_full = mask_linear_indices(
+            self.rx_mask, order=self._kwave_output_order
+        )
 
         self._row_map: Dict[int, int] = {idx: k for k, idx in enumerate(lin_idx)}
 
-        # Rx linear indices in k-Wave order (flattened Fortran)
+        # Rx linear indices in unified k-Wave output order.
         self.n_rx_full = int(self.rx_mask.sum())
         self._rx_lin_idx = self._rx_lin_idx_full
         self.n_rx = self.n_rx_full
@@ -285,9 +365,21 @@ class WaveOperator(Operator):
         # ---------- 6. receiver masks -------------------------------
         # Active receiver elements and their linear indices
         rx_elem_indices = geom.get_rx_elem_indices()  # element indices of active RX
-        lin_each = geom.elem_y_idx[rx_elem_indices].astype(
-            np.int64
-        ) + self.ny * geom.elem_x_idx[rx_elem_indices].astype(np.int64)
+        lin_each = np.array(
+            [
+                linear_index_2d(
+                    int(ix),
+                    int(iy),
+                    ny=self.ny,
+                    nx=self.nx,
+                    order=self._kwave_output_order,
+                )
+                for ix, iy in zip(
+                    geom.elem_x_idx[rx_elem_indices], geom.elem_y_idx[rx_elem_indices]
+                )
+            ],
+            dtype=np.int64,
+        )
 
         lin_full = self._rx_lin_idx_full  # linear indices in k-Wave order
         # build mapping safely (no assumption about sorted membership beyond equality)
@@ -374,6 +466,9 @@ class WaveOperator(Operator):
             f"tau_max={self.tau_max:.3e}s, dsrx={self.drop_self_rx}, full_wf={self.record_full_wf}, "
             f"src_mode={self.src_mode}, kwave_backend={self.kwave_backend}, "
             f"device={self._kwave_device}, custom_cpp_binary={self._use_custom_cpp_binary}, "
+            f"kwave_version={self._kwave_version or 'unknown'}, "
+            f"kwave_output_order={self._kwave_output_order}, "
+            f"kwave_source_order={self._kwave_source_order}, "
             f"rx_order=element, pulse={self._pulse_info}"
         )
 
@@ -386,10 +481,6 @@ class WaveOperator(Operator):
     def _xy2idx(self, xy) -> Tuple[int, int]:
         """Convert (x,y) [m] to (ix,iy) indices."""
         return self.img_grid.coord2index(*xy)
-
-    @staticmethod
-    def _reshape(raw, nt, ny, nx):
-        return raw.reshape((nt, ny, nx), order="F")
 
     @staticmethod
     def _normalize_sensor_time_series(
@@ -415,7 +506,7 @@ class WaveOperator(Operator):
         )
 
     def _mask_lin_idx(self, mask: np.ndarray) -> np.ndarray:
-        return np.flatnonzero(mask.flatten(order="F"))
+        return mask_linear_indices(mask, order=self._kwave_output_order)
 
     def _build_backend_rx_mask_for_tx(self, tx_idx: int) -> np.ndarray:
         return self._geom.build_rx_mask_for_tx(tx_idx)
@@ -424,7 +515,9 @@ class WaveOperator(Operator):
         mask[iy, ix] = True
 
     def _source_row_key(self, ix: int, iy: int) -> int:
-        return iy + self.ny * ix
+        return linear_index_2d(
+            ix, iy, ny=self.ny, nx=self.nx, order=self._kwave_output_order
+        )
 
     def _kwave_cpp_binary_name(self) -> str:
         binary_name = (
@@ -597,12 +690,111 @@ class WaveOperator(Operator):
         sensor_mask_override: Optional[np.ndarray] = None,
     ):
         """Run the configured k-Wave backend with fresh grid & medium each time."""
+        if self._use_legacy_cpp_path:
+            return self._run_sim_legacy(
+                src_mask,
+                p_mat,
+                full_wf=full_wf,
+                sensor_mask_override=sensor_mask_override,
+            )
         return self._run_sim_unified(
             src_mask,
             p_mat,
             full_wf=full_wf,
             sensor_mask_override=sensor_mask_override,
         )
+
+    def _run_sim_legacy(
+        self,
+        src_mask,
+        p_mat,
+        *,
+        full_wf: bool,
+        sensor_mask_override: Optional[np.ndarray] = None,
+    ):
+        """Run the legacy kspaceFirstOrder2D serializer for custom macOS binaries."""
+        p_mat = reorder_rows_for_mask(
+            p_mat,
+            src_mask,
+            from_order=self._kwave_output_order,
+            to_order=self._kwave_source_order,
+        )
+        p_mat = np.ascontiguousarray(p_mat, dtype=np.float32)
+
+        grid = copy.deepcopy(self._grid_tpl)
+        medium = copy.deepcopy(self.medium)
+
+        ks = kSource()
+        ks.mask = ks.p_mask = src_mask
+        ks.p = p_mat
+        ks.p_mode = self.src_mode
+
+        if full_wf:
+            raw_mask = np.ones((self.ny, self.nx), bool)
+        else:
+            raw_mask = (
+                sensor_mask_override
+                if sensor_mask_override is not None
+                else self.rx_mask
+            )
+
+        sensor = kSensor(mask=raw_mask, record=["p"])
+
+        try:
+            if self.verbose:
+                out = self._k_solver(
+                    grid, ks, sensor, medium, self.sim_opts, self.exec_opts
+                )
+            else:
+                _null = open(os.devnull, "w")
+                with contextlib.redirect_stdout(_null), contextlib.redirect_stderr(
+                    _null
+                ):
+                    out = self._k_solver(
+                        grid, ks, sensor, medium, self.sim_opts, self.exec_opts
+                    )
+                _null.close()
+        except subprocess.CalledProcessError as exc:
+            self._reraise_known_kwave_cpp_issue(
+                exc, binary_path=self._staged_binary_path
+            )
+            raise
+
+        raw = self._normalize_sensor_time_series(
+            out["p"], nt=self.nt, n_sensor=int(raw_mask.sum())
+        )
+
+        if full_wf:
+            wf = reshape_sensor_rows_to_wavefield(
+                raw,
+                nt=self.nt,
+                ny=self.ny,
+                nx=self.nx,
+                order=self._kwave_output_order,
+            )
+
+            if sensor_mask_override is None:
+                lin_cur = self._rx_lin_idx_full
+                rec_full = raw[lin_cur, :]
+            else:
+                lin_full = self._rx_lin_idx_full
+                lin_cur = self._mask_lin_idx(sensor_mask_override)
+                rec_used = raw[lin_cur, :]
+                pos = np.searchsorted(lin_full, lin_cur)
+                rec_full = np.zeros((self.n_rx_full, self.nt), dtype=rec_used.dtype)
+                rec_full[pos, :] = rec_used
+
+            return wf, rec_full
+
+        if sensor_mask_override is None:
+            return None, raw
+
+        lin_full = self._rx_lin_idx_full
+        lin_cur = self._mask_lin_idx(sensor_mask_override)
+        pos = np.searchsorted(lin_full, lin_cur)
+        rec_full = np.zeros((self.n_rx_full, self.nt), dtype=raw.dtype)
+        rec_full[pos, :] = raw
+        return None, rec_full
 
     def _run_sim_unified(
         self,
@@ -613,6 +805,12 @@ class WaveOperator(Operator):
         sensor_mask_override: Optional[np.ndarray] = None,
     ):
         """Run unified `kspaceFirstOrder` and normalize results to Chirpy shapes."""
+        p_mat = reorder_rows_for_mask(
+            p_mat,
+            src_mask,
+            from_order=self._kwave_output_order,
+            to_order=self._kwave_source_order,
+        )
         p_mat = np.ascontiguousarray(p_mat, dtype=np.float32)
 
         grid = copy.deepcopy(self._grid_tpl)
@@ -662,8 +860,12 @@ class WaveOperator(Operator):
         )
 
         if full_wf:
-            wf = raw.reshape((self.ny, self.nx, self.nt), order="F").transpose(
-                2, 0, 1
+            wf = reshape_sensor_rows_to_wavefield(
+                raw,
+                nt=self.nt,
+                ny=self.ny,
+                nx=self.nx,
+                order=self._kwave_output_order,
             )
 
             if sensor_mask_override is None:

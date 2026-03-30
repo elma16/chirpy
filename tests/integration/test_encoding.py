@@ -5,8 +5,6 @@ pytestmark = [pytest.mark.slow, pytest.mark.kwave]
 
 
 def test_source_encoding_k_sum_vs_single(
-    installed_kwave_cpp_binary,
-    no_custom_kwave_binary,
     tiny_grid,
     gaussian_pulse,
     record_time,
@@ -43,6 +41,7 @@ def test_source_encoding_k_sum_vs_single(
         pml_alpha=8.0,
         verbose=False,
         use_gpu=False,
+        kwave_backend="python",
     )
     d_obs = op_true.forward(m_true, kind="c")
 
@@ -65,6 +64,7 @@ def test_source_encoding_k_sum_vs_single(
         pml_alpha=8.0,
         verbose=False,
         use_gpu=False,
+        kwave_backend="python",
     )
 
     # K=1 vs K>1 : gradient must scale ~ linearly (sum, not average)

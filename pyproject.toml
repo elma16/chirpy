@@ -14,7 +14,7 @@ authors = [
     {name = "Elliott Macneil", email = "ucabem1@ucl.ac.uk"},
 ]
 keywords = ["ultrasound", "tomography", "inversion", "medical-imaging"]
-dependencies = ["k-Wave-python>=0.6.0", "tqdm"]
+dependencies = ["k-Wave-python @ git+https://github.com/waltsims/k-wave-python.git@master", "tqdm"]
 
 
 [project.optional-dependencies]
@@ -48,6 +48,7 @@ ignore = ["E501"]
 #extend-include = ["*.ipynb"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests/unit"]
 addopts = "-ra -q"
 markers = [
   "slow: long-running integration tests",
