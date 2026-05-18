@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import copy
 import os
 import shutil
@@ -31,9 +30,6 @@ from kwave.kmedium import kWaveMedium
 from kwave.ksource import kSource
 from kwave.ksensor import kSensor
 from kwave.kspaceFirstOrder import kspaceFirstOrder
-from kwave.kspaceFirstOrder2D import kspace_first_order_2d_gpu, kspaceFirstOrder2DC
-from kwave.options.simulation_execution_options import SimulationExecutionOptions
-from kwave.options.simulation_options import SimulationOptions
 import kwave
 
 
@@ -83,7 +79,7 @@ class WaveOperator(Operator):
         Parameters for `kWaveMedium` (e.g., sound_speed, density, alpha_coeff,
         alpha_power, alpha_mode). Missing keys are filled with reasonable defaults:
         sound_speed=1500 m/s, density=1000 kg/m³, alpha_coeff=zeros, power≈1.01,
-        no dispersion.
+        and no dispersion on the Python backend.
     record_time : float
         Time (seconds) to record per shot (pre-delay); total simulation window is
         `record_time + tau_max`.
@@ -220,35 +216,28 @@ class WaveOperator(Operator):
         self._use_custom_cpp_binary = (
             self.kwave_backend == "cpp" and self.binary_path is not None
         )
-        self._use_legacy_cpp_path = self._use_custom_cpp_binary
         self._custom_binary_tmpdir: tempfile.TemporaryDirectory | None = None
-        self._custom_binary_root: Path | None = None
         self._staged_binary_path: Path | None = None
         if self._use_custom_cpp_binary:
             self._custom_binary_tmpdir = tempfile.TemporaryDirectory(
                 prefix="chirpy_kwave_bin_"
             )
-            self._custom_binary_root = Path(self._custom_binary_tmpdir.name)
-            staged_binary = self._custom_binary_root / self._kwave_cpp_binary_name()
+            staged_binary = (
+                Path(self._custom_binary_tmpdir.name) / self._kwave_cpp_binary_name()
+            )
             shutil.copy2(self.binary_path, staged_binary)
             staged_binary.chmod(staged_binary.stat().st_mode | 0o755)
             self._staged_binary_path = staged_binary
 
         self._kwave_version = resolve_kwave_version(kwave)
-        if self._use_legacy_cpp_path:
-            # The macOS custom binary is built against the legacy HDF5 schema
-            # used by kspaceFirstOrder2DC and still expects F-order masks/rows.
-            self._kwave_output_order = "F"
-            self._kwave_source_order = "F"
-        else:
-            self._kwave_output_order = kwave_output_order(
-                self._kwave_version, docstring=getattr(kspaceFirstOrder, "__doc__", None)
-            )
-            self._kwave_source_order = kwave_source_order(
-                self._kwave_version,
-                backend=self.kwave_backend,
-                docstring=getattr(kspaceFirstOrder, "__doc__", None),
-            )
+        self._kwave_output_order = kwave_output_order(
+            self._kwave_version, docstring=getattr(kspaceFirstOrder, "__doc__", None)
+        )
+        self._kwave_source_order = kwave_source_order(
+            self._kwave_version,
+            backend=self.kwave_backend,
+            docstring=getattr(kspaceFirstOrder, "__doc__", None),
+        )
 
         if geom_config is None:
             if data is None:
@@ -289,7 +278,10 @@ class WaveOperator(Operator):
         med.setdefault("density", np.full((self.ny, self.nx), 1000.0, np.float32))
         med.setdefault("alpha_coeff", np.zeros((self.ny, self.nx), np.float32))
         med.setdefault("alpha_power", 1.01)
-        med.setdefault("alpha_mode", "no_dispersion")
+        if self.kwave_backend == "python":
+            med.setdefault("alpha_mode", "no_dispersion")
+        elif "alpha_mode" in med and np.all(np.asarray(med["alpha_coeff"]) == 0):
+            med.pop("alpha_mode")
         self.medium = kWaveMedium(**med)
 
         # cache current model (always real 2D arrays)
@@ -313,30 +305,6 @@ class WaveOperator(Operator):
         self._pml_inside = bool(pml_inside)
         self._scale_source_terms = bool(scale_source_terms)
         self._src_scale = 1.0
-        self.sim_opts: SimulationOptions | None = None
-        self.exec_opts: SimulationExecutionOptions | None = None
-        self._k_solver = None
-        if self._use_legacy_cpp_path:
-            self.sim_opts = SimulationOptions(
-                save_to_disk=True,
-                pml_size=[self._pml_size, self._pml_size],
-                pml_x_size=self._pml_size,
-                pml_y_size=self._pml_size,
-                pml_x_alpha=self._pml_alpha,
-                pml_y_alpha=self._pml_alpha,
-                scale_source_terms=bool(scale_source_terms),
-                data_cast="single",
-                pml_inside=self._pml_inside,
-            )
-            self.exec_opts = SimulationExecutionOptions(
-                is_gpu_simulation=use_gpu,
-                binary_path=self._staged_binary_path,
-                show_sim_log=bool(verbose),
-                verbose_level=2 if verbose else 0,
-            )
-            self._k_solver = (
-                kspace_first_order_2d_gpu if use_gpu else kspaceFirstOrder2DC
-            )
         # ---------- 5. geometry --------------------------------------
         # Active TX elements and positions (element index space)
         self.tx_elem_indices = geom.get_tx_elem_indices()  # element indices
@@ -348,9 +316,7 @@ class WaveOperator(Operator):
 
         self.src_mask = src_mask_grid
         self.rx_mask = rx_mask_grid
-        lin_idx = mask_linear_indices(
-            self.src_mask, order=self._kwave_output_order
-        )
+        lin_idx = mask_linear_indices(self.src_mask, order=self._kwave_output_order)
         self._rx_lin_idx_full = mask_linear_indices(
             self.rx_mask, order=self._kwave_output_order
         )
@@ -529,34 +495,20 @@ class WaveOperator(Operator):
             binary_name += ".exe"
         return binary_name
 
-    @contextlib.contextmanager
-    def _temporary_kwave_binary_root(self):
-        if not self._use_custom_cpp_binary:
-            yield
-            return
-
-        original_binary_path = kwave.BINARY_PATH
-        original_binary_dir = getattr(kwave, "BINARY_DIR", original_binary_path)
-        kwave.BINARY_PATH = self._custom_binary_root
-        kwave.BINARY_DIR = self._custom_binary_root
-        try:
-            yield
-        finally:
-            kwave.BINARY_PATH = original_binary_path
-            kwave.BINARY_DIR = original_binary_dir
-
     @staticmethod
     def _known_kwave_hdf5_macos_issue(exc: BaseException) -> str | None:
         stderr = getattr(exc, "stderr", "") or ""
         stdout = getattr(exc, "stdout", "") or ""
         text = "\n".join(part for part in (str(exc), stderr, stdout) if part)
-        if "Library not loaded" in text and "libhdf5.310.dylib" in text:
+        if "Library not loaded" in text and "libhdf5" in text and ".dylib" in text:
             return (
                 "k-Wave C++ backend failed to start on macOS because the binary "
-                "expects libhdf5.310.dylib. This matches upstream "
-                "k-wave-python issue #661. Use `kwave_backend=\"python\"` for the "
-                "in-process solver, or point Chirpy at a working custom C++ "
-                "binary via `binary_path` / `CHIRPY_KWAVE_BIN`."
+                "could not load its HDF5 dylib. With k-wave-python>=0.6.2 this "
+                "usually means the selected binary is stale or was built against "
+                'a different local HDF5 install. Use `kwave_backend="python"` '
+                "for the in-process solver, reinstall k-wave-python, or point "
+                "Chirpy at a working custom C++ binary via `binary_path` / "
+                "`CHIRPY_KWAVE_BIN`."
             )
         return None
 
@@ -690,111 +642,12 @@ class WaveOperator(Operator):
         sensor_mask_override: Optional[np.ndarray] = None,
     ):
         """Run the configured k-Wave backend with fresh grid & medium each time."""
-        if self._use_legacy_cpp_path:
-            return self._run_sim_legacy(
-                src_mask,
-                p_mat,
-                full_wf=full_wf,
-                sensor_mask_override=sensor_mask_override,
-            )
         return self._run_sim_unified(
             src_mask,
             p_mat,
             full_wf=full_wf,
             sensor_mask_override=sensor_mask_override,
         )
-
-    def _run_sim_legacy(
-        self,
-        src_mask,
-        p_mat,
-        *,
-        full_wf: bool,
-        sensor_mask_override: Optional[np.ndarray] = None,
-    ):
-        """Run the legacy kspaceFirstOrder2D serializer for custom macOS binaries."""
-        p_mat = reorder_rows_for_mask(
-            p_mat,
-            src_mask,
-            from_order=self._kwave_output_order,
-            to_order=self._kwave_source_order,
-        )
-        p_mat = np.ascontiguousarray(p_mat, dtype=np.float32)
-
-        grid = copy.deepcopy(self._grid_tpl)
-        medium = copy.deepcopy(self.medium)
-
-        ks = kSource()
-        ks.mask = ks.p_mask = src_mask
-        ks.p = p_mat
-        ks.p_mode = self.src_mode
-
-        if full_wf:
-            raw_mask = np.ones((self.ny, self.nx), bool)
-        else:
-            raw_mask = (
-                sensor_mask_override
-                if sensor_mask_override is not None
-                else self.rx_mask
-            )
-
-        sensor = kSensor(mask=raw_mask, record=["p"])
-
-        try:
-            if self.verbose:
-                out = self._k_solver(
-                    grid, ks, sensor, medium, self.sim_opts, self.exec_opts
-                )
-            else:
-                _null = open(os.devnull, "w")
-                with contextlib.redirect_stdout(_null), contextlib.redirect_stderr(
-                    _null
-                ):
-                    out = self._k_solver(
-                        grid, ks, sensor, medium, self.sim_opts, self.exec_opts
-                    )
-                _null.close()
-        except subprocess.CalledProcessError as exc:
-            self._reraise_known_kwave_cpp_issue(
-                exc, binary_path=self._staged_binary_path
-            )
-            raise
-
-        raw = self._normalize_sensor_time_series(
-            out["p"], nt=self.nt, n_sensor=int(raw_mask.sum())
-        )
-
-        if full_wf:
-            wf = reshape_sensor_rows_to_wavefield(
-                raw,
-                nt=self.nt,
-                ny=self.ny,
-                nx=self.nx,
-                order=self._kwave_output_order,
-            )
-
-            if sensor_mask_override is None:
-                lin_cur = self._rx_lin_idx_full
-                rec_full = raw[lin_cur, :]
-            else:
-                lin_full = self._rx_lin_idx_full
-                lin_cur = self._mask_lin_idx(sensor_mask_override)
-                rec_used = raw[lin_cur, :]
-                pos = np.searchsorted(lin_full, lin_cur)
-                rec_full = np.zeros((self.n_rx_full, self.nt), dtype=rec_used.dtype)
-                rec_full[pos, :] = rec_used
-
-            return wf, rec_full
-
-        if sensor_mask_override is None:
-            return None, raw
-
-        lin_full = self._rx_lin_idx_full
-        lin_cur = self._mask_lin_idx(sensor_mask_override)
-        pos = np.searchsorted(lin_full, lin_cur)
-        rec_full = np.zeros((self.n_rx_full, self.nt), dtype=raw.dtype)
-        rec_full[pos, :] = raw
-        return None, rec_full
 
     def _run_sim_unified(
         self,
@@ -833,19 +686,23 @@ class WaveOperator(Operator):
         sensor = kSensor(mask=raw_mask, record=["p"])
 
         try:
-            with self._temporary_kwave_binary_root():
-                out = kspaceFirstOrder(
-                    grid,
-                    medium,
-                    ks,
-                    sensor,
-                    pml_size=self._pml_size,
-                    pml_alpha=self._pml_alpha,
-                    pml_inside=self._pml_inside,
-                    backend=self.kwave_backend,
-                    device=self._kwave_device,
-                    quiet=not self.verbose,
-                )
+            kwargs = {}
+            if self.kwave_backend == "cpp" and self._staged_binary_path is not None:
+                kwargs["binary_path"] = str(self._staged_binary_path)
+
+            out = kspaceFirstOrder(
+                grid,
+                medium,
+                ks,
+                sensor,
+                pml_size=self._pml_size,
+                pml_alpha=self._pml_alpha,
+                pml_inside=self._pml_inside,
+                backend=self.kwave_backend,
+                device=self._kwave_device,
+                quiet=not self.verbose,
+                **kwargs,
+            )
         except subprocess.CalledProcessError as exc:
             binary_path = None
             if self.kwave_backend == "cpp":

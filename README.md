@@ -41,7 +41,7 @@ pip install ".[gpu]"
 
 For time-domain simulations, `WaveOperator` defaults to `kwave_backend="cpp"`. To use the new CuPy-backed k-Wave Python solver on GPU, construct the operator with `kwave_backend="python", use_gpu=True`. Note also that from preliminary use, the CuPy version of k-wave-python is faster than the GPU C++ version only for small to moderate sized grids (64^2 - 128^2). Your mileage may vary.
 
-On macOS, the upstream packaged C++ backend can currently fail on a fresh install with a missing `libhdf5.310.dylib`; see [waltsims/k-wave-python#661](https://github.com/waltsims/k-wave-python/issues/661). Chirpy does not try to patch Homebrew or create HDF5 symlinks automatically. If you hit that error, use `kwave_backend="python"` or provide a working custom C++ binary via `binary_path` / `CHIRPY_KWAVE_BIN`.
+Chirpy pins `k-wave-python` to the upstream `v0.6.2` tag. That release refreshes the packaged C++ binaries, fixes the C++ source-signal flag handling, and adds first-class `binary_path` support in the unified `kspaceFirstOrder()` API. Chirpy now uses that unified path for both packaged and custom C++ binaries.
 
 ### JAX Helmholtz backend
 
@@ -60,44 +60,17 @@ pip install ".[dev]"
 pre-commit install
 ```
 
-> **⚠️ macOS Users — Important Note on Absorption Support**
+> **⚠️ macOS Users**
 >
-> At present, **absorption support in `k-Wave-python` is broken on macOS** due to [issues](https://github.com/waltsims/k-wave-python/issues/470) in the OpenMP backend used by the default build.  
-> Separately, the stock packaged C++ backend may also fail to start on macOS because of the HDF5 runtime mismatch tracked in [issue #661](https://github.com/waltsims/k-wave-python/issues/661).
+> `k-wave-python v0.6.2` includes an Apple Silicon OpenMP binary with the HDF5 ABI refresh from [waltsims/k-wave-python#661](https://github.com/waltsims/k-wave-python/issues/661) and the absorbing-media fast-math fix. Chirpy no longer recommends the old Homebrew HDF5 symlink workaround for the packaged binary.
 >
-> If you only need Chirpy to run on macOS right now, the simplest route is to use the in-process Python solver:
+> On Intel Macs, upstream currently skips the packaged macOS C++ binary because the v1.4.x Darwin binary is arm64-only. Use the in-process Python solver:
 >
 > ```python
 > op = WaveOperator(..., kwave_backend="python")
 > ```
 >
-> If you want the C++ backend to run on macOS, there are two known routes.
->
-> **Route 1: temporary workaround for the stock packaged binary**
->
-> Issue #661 includes a user-confirmed Homebrew workaround for the missing `libhdf5.310.dylib` dependency. On newer Homebrew releases, `brew extract` may fail unless you first force a local `homebrew/core` checkout instead of API-only mode:
->
-> ```bash
-> export HOMEBREW_NO_INSTALL_FROM_API=1
-> brew tap --force homebrew/core
-> brew tap-new "$USER"/local-hdf5
-> brew extract --version=1.14.6 hdf5 "$USER"/local-hdf5
-> brew install "$USER"/local-hdf5/hdf5@1.14.6
-> ln -sfn /opt/homebrew/opt/hdf5@1.14.6 /opt/homebrew/opt/hdf5
-> ```
->
-> This makes `/opt/homebrew/opt/hdf5/lib/libhdf5.310.dylib` visible at the path expected by the packaged `kspaceFirstOrder-OMP` binary. This is a global Homebrew symlink hack, so use it with care.
->
-> **Route 2: recommended for Chirpy on macOS — rebuild a custom C++ binary against your current Homebrew HDF5**
->
-> This avoids the old `libhdf5.310.dylib` packaged-binary mismatch entirely. First, make sure the standard unversioned Homebrew `opt` path exists and points at your installed HDF5 keg:
->
-> ```bash
-> ln -sfn "$(readlink /opt/homebrew/opt/hdf5@1.14)" /opt/homebrew/opt/hdf5
-> ls /opt/homebrew/opt/hdf5/lib/libhdf5*.dylib
-> ```
->
-> Then rebuild the Darwin-compatible OpenMP binary from the fork below and point Chirpy at that binary explicitly:
+> If you want to use a custom C++ backend on macOS, build the Darwin-compatible OpenMP binary and point Chirpy at it explicitly:
 >
 > ```bash
 > git clone https://github.com/elma16/k-wave-omp-darwin.git
@@ -106,7 +79,7 @@ pre-commit install
 > make -j"$(sysctl -n hw.logicalcpu)"
 > ```
 >
-> The `Makefile` in that repository links against `/opt/homebrew/opt/hdf5`, so rebuilding after restoring that symlink produces a binary linked against the HDF5 version actually present on your machine. You can verify the rebuilt binary before using it in Chirpy:
+> The `Makefile` in that repository links against `/opt/homebrew/opt/hdf5`, so the binary should be built against the HDF5 version actually present on your machine. You can verify the rebuilt binary before using it in Chirpy:
 >
 > ```bash
 > otool -L ./kspaceFirstOrder-OMP | rg hdf5
@@ -114,17 +87,17 @@ pre-commit install
 > ```
 >
 > Once built, point Chirpy’s `WaveOperator` to your compiled `kspaceFirstOrder-OMP` binary from this repository. This custom-binary escape hatch is only supported when `kwave_backend="cpp"`.
-> When `binary_path` / `CHIRPY_KWAVE_BIN` is set, Chirpy intentionally uses the legacy `kspaceFirstOrder2DC` serialization path for that binary so the macOS fork continues to receive the HDF5 source metadata it expects.
+> When `binary_path` / `CHIRPY_KWAVE_BIN` is set, Chirpy passes the staged binary to the unified `kspaceFirstOrder(..., binary_path=...)` path and keeps its internal C/F-order normalization for source and sensor rows.
 >
 > For more details, see: [elma16/k-wave-omp-darwin](https://github.com/elma16/k-wave-omp-darwin).
 >
-> Chirpy’s test suite treats the HDF5 mismatch from issue #661 as an upstream environment problem. When that exact macOS load failure is detected, the C++-backend integration tests are skipped instead of failing the whole suite.
+> Chirpy’s test suite treats local HDF5 dylib load failures as environment problems. When that exact macOS load failure is detected, the C++-backend integration tests are skipped instead of failing the whole suite.
 >
 > **Usage inside Chirpy:** set an environment variable before running examples/tests:
 > ```bash
 > export CHIRPY_KWAVE_BIN=/path/to/k-wave-omp-darwin/kspaceFirstOrder-OMP
 > ```
-> When this variable is exported before `pytest`, Chirpy's k-Wave integration fixtures will use that custom binary instead of the packaged `kwave` one. The fixtures follow the same resolution order as `WaveOperator`: `CHIRPY_KWAVE_BIN`, then any `kspaceFirstOrder-OMP` on your `PATH`, then the packaged `kwave` binary.
+> When this variable is exported before `pytest`, Chirpy's custom-binary integration fixtures will use it. Those fixtures resolve `CHIRPY_KWAVE_BIN` first, then any `kspaceFirstOrder-OMP` on your `PATH`; the default `WaveOperator(..., kwave_backend="cpp")` path uses the packaged upstream binary when no custom binary is supplied.
 > You can quickly verify the binary before running the Chirpy test suite:
 > ```bash
 > "$CHIRPY_KWAVE_BIN" --help

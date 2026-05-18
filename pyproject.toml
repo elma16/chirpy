@@ -14,7 +14,7 @@ authors = [
     {name = "Elliott Macneil", email = "ucabem1@ucl.ac.uk"},
 ]
 keywords = ["ultrasound", "tomography", "inversion", "medical-imaging"]
-dependencies = ["k-Wave-python @ git+https://github.com/waltsims/k-wave-python.git@master", "tqdm"]
+dependencies = ["k-Wave-python @ git+https://github.com/waltsims/k-wave-python.git@v0.6.2", "tqdm"]
 
 
 [project.optional-dependencies]

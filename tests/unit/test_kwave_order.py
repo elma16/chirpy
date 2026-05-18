@@ -26,6 +26,7 @@ reshape_sensor_rows_to_wavefield = _MODULE.reshape_sensor_rows_to_wavefield
 
 
 def test_kwave_output_order_uses_v061_c_order():
+    assert kwave_output_order("0.6.2") == "C"
     assert kwave_output_order("0.6.1") == "C"
     assert kwave_output_order("0.6.0") == "F"
 
@@ -36,6 +37,8 @@ def test_kwave_output_order_falls_back_to_docstring():
 
 
 def test_kwave_source_order_splits_python_and_cpp_at_v061():
+    assert kwave_source_order("0.6.2", backend="python") == "C"
+    assert kwave_source_order("0.6.2", backend="cpp") == "F"
     assert kwave_source_order("0.6.1", backend="python") == "C"
     assert kwave_source_order("0.6.1", backend="cpp") == "F"
     assert kwave_source_order("0.6.0", backend="python") == "F"

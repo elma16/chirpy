@@ -183,12 +183,7 @@ def test_backend_parity_forward_sensor_only_cpu(
     record_time,
     c0,
 ):
-    """Compare two independent python-backend operators for sensor-only forward.
-
-    The unified kspaceFirstOrder(backend='cpp') has upstream source-scaling and
-    output-transposition bugs (see k-wave-python #697 follow-ups), so parity
-    tests use the python backend for both sides until those are resolved.
-    """
+    """Compare two independent python-backend operators for sensor-only forward."""
     _require_kwave()
 
     model = _true_model(tiny_grid, c0)

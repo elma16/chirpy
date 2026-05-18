@@ -27,10 +27,12 @@ Chirpy targets Python 3.10+. Choose the extra that matches your hardware:
      pip install ".[dev]"
      pre-commit install
 
-macOS absorption note
----------------------
+macOS C++ backend note
+----------------------
 
-Absorption support in ``k-Wave-python`` is currently broken on macOS because of OpenMP issues. If you need absorption on a Mac, build the patched backend:
+Chirpy pins ``k-Wave-python`` to upstream ``v0.6.2``. That release includes an Apple Silicon OpenMP binary with the HDF5 ABI refresh and absorbing-media fast-math fix. On Intel Macs, upstream currently skips the packaged C++ binary because the Darwin v1.4.x binary is arm64-only; use ``kwave_backend="python"`` or build a custom backend.
+
+If you need a custom C++ backend on macOS, build the patched backend:
 
 .. code-block:: bash
 
@@ -39,7 +41,7 @@ Absorption support in ``k-Wave-python`` is currently broken on macOS because of 
    make clean
    make -j"$(sysctl -n hw.logicalcpu)"
 
-Then point :class:`chirpy.optimization.operator.WaveOperator` at the compiled ``kspaceFirstOrder-OMP`` binary from that repository.
+Then point :class:`chirpy.optimization.operator.WaveOperator` at the compiled ``kspaceFirstOrder-OMP`` binary from that repository with ``binary_path`` or ``CHIRPY_KWAVE_BIN``.
 
 Run an example notebook
 -----------------------

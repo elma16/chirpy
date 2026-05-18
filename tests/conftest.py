@@ -53,12 +53,11 @@ def _kwave_binary_startup_issue(binary_path: Path) -> str | None:
         return None
 
     stderr = proc.stderr or ""
-    if "Library not loaded" in stderr and "libhdf5.310.dylib" in stderr:
+    if "Library not loaded" in stderr and "libhdf5" in stderr and ".dylib" in stderr:
         return (
             "skipping k-Wave C++ integration tests on macOS because the binary "
-            "hits the known k-wave-python HDF5 mismatch "
-            '(issue #661: missing libhdf5.310.dylib; use kwave_backend="python" '
-            "or set CHIRPY_KWAVE_BIN to a working custom binary, see README)"
+            'cannot load its HDF5 dylib; use kwave_backend="python", reinstall '
+            "k-wave-python, or set CHIRPY_KWAVE_BIN to a working custom binary"
         )
     return None
 
